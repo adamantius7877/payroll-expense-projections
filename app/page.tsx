@@ -45,8 +45,6 @@ type AppState = {
   expenses: Expense[];
 };
 
-const storageKey = "pay-schedule-dashboard-v1";
-
 const monthNames = [
   "January",
   "February",
@@ -375,26 +373,69 @@ export default function Home() {
   const [state, setState] = useState<AppState>(defaultState);
   const [selectedMonth, setSelectedMonth] = useState(monthKey(new Date()));
   const [importMessage, setImportMessage] = useState("Ready to import a Google Sheet CSV.");
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [saveStatus, setSaveStatus] = useState("Loading shared household data...");
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(storageKey);
-    if (!saved) return;
-    try {
-      const parsed = JSON.parse(saved) as AppState;
-      setState({
-        ...defaultState,
-        ...parsed,
-        expenses: (parsed.expenses || []).map(normalizeExpense),
-      });
-    } catch {
-      setImportMessage("Saved data could not be loaded, so starter values are showing.");
+    let active = true;
+
+    async function loadSavedState() {
+      try {
+        const response = await fetch("/api/state", { cache: "no-store" });
+        if (!response.ok) throw new Error("The shared database could not be reached.");
+        const payload = (await response.json()) as { state?: AppState | null };
+        if (!active) return;
+        if (payload.state) {
+          setState({
+            ...defaultState,
+            ...payload.state,
+            expenses: (payload.state.expenses || []).map(normalizeExpense),
+          });
+          setSaveStatus("Shared data loaded.");
+        } else {
+          setSaveStatus("No shared data yet. Changes will save to the database.");
+        }
+      } catch {
+        if (!active) return;
+        setSaveStatus("Database unavailable. Changes on this screen may not be shared.");
+      } finally {
+        if (active) setIsLoaded(true);
+      }
     }
+
+    loadSavedState();
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(storageKey, JSON.stringify(state));
-  }, [state]);
+    if (!isLoaded) return;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      try {
+        setSaveStatus("Saving shared data...");
+        const response = await fetch("/api/state", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(state),
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("Save failed.");
+        setSaveStatus("Shared data saved.");
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          setSaveStatus("Shared database save failed.");
+        }
+      }
+    }, 500);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [isLoaded, state]);
 
   const paychecks = useMemo(() => buildPaychecks(state), [state]);
   const selectedTotal = useMemo(
@@ -578,14 +619,14 @@ export default function Home() {
               className="secondary-button"
               type="button"
               onClick={() => {
-                window.localStorage.removeItem(storageKey);
                 setState(defaultState);
-                setImportMessage("Saved data was reset.");
+                setImportMessage("Shared data was reset.");
               }}
             >
               Reset saved data
             </button>
             <p className="status-note">{importMessage}</p>
+            <p className="status-note">{saveStatus}</p>
           </section>
         </aside>
 
