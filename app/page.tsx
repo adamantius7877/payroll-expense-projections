@@ -24,6 +24,7 @@ type Expense = {
   annualMonth: number;
   statuses: Record<string, Status>;
   monthlyAmounts: Record<string, number>;
+  amountOverrides: Record<string, number>;
 };
 
 type Paycheck = {
@@ -119,6 +120,7 @@ function makeExpense(
     annualMonth: new Date().getMonth(),
     statuses: {},
     monthlyAmounts: {},
+    amountOverrides: {},
   };
 }
 
@@ -131,6 +133,7 @@ function normalizeExpense(expense: Expense): Expense {
     annualMonth: Number.isInteger(expense.annualMonth) ? expense.annualMonth : new Date().getMonth(),
     statuses: expense.statuses || {},
     monthlyAmounts: expense.monthlyAmounts || {},
+    amountOverrides: expense.amountOverrides || {},
   };
 }
 
@@ -375,6 +378,11 @@ function expenseAmountForMonth(expense: Expense, key: string) {
   return cleanExpense.monthlyAmounts[key] ?? cleanExpense.amount;
 }
 
+function projectedAmountForOccurrence(expense: Expense, statusKey: string, fallbackMonthKey: string) {
+  const cleanExpense = normalizeExpense(expense);
+  return cleanExpense.amountOverrides[statusKey] ?? expenseAmountForMonth(cleanExpense, fallbackMonthKey);
+}
+
 function applyProjectedItem(check: Paycheck, item: ProjectedExpense) {
   check.expenses.push(item);
   if (item.expense.kind === "credit") {
@@ -444,7 +452,7 @@ function buildPaychecks(state: AppState): Paycheck[] {
       if (expense.recurrence !== "per-paycheck") return;
       const key = monthKey(check.date);
       const statusKey = occurrenceStatusKey(check.date);
-      const amount = expenseAmountForMonth(expense, key);
+      const amount = projectedAmountForOccurrence(expense, statusKey, key);
       if (amount <= 0) return;
       applyProjectedItem(check, {
         expense,
@@ -463,8 +471,6 @@ function buildPaychecks(state: AppState): Paycheck[] {
       const key = monthKey(monthCursor);
       state.expenses.map(normalizeExpense).forEach((expense) => {
         if (expense.recurrence === "per-paycheck" || !expenseRunsInMonth(expense, monthCursor)) return;
-        const amount = expenseAmountForMonth(expense, key);
-        if (amount <= 0) return;
         const occurrence = new Date(
           monthCursor.getFullYear(),
           monthCursor.getMonth(),
@@ -473,6 +479,8 @@ function buildPaychecks(state: AppState): Paycheck[] {
         );
         if (occurrence < check.date || occurrence >= periodEnd) return;
         const statusKey = occurrenceStatusKey(occurrence);
+        const amount = projectedAmountForOccurrence(expense, statusKey, key);
+        if (amount <= 0) return;
         applyProjectedItem(check, {
           expense,
           occurrence,
@@ -659,6 +667,17 @@ export default function Home() {
     updateExpense(item.expense.id, {
       statuses: { ...item.expense.statuses, [item.statusKey]: status },
     });
+  }
+
+  function updateProjectedAmount(item: ProjectedExpense, amount: number) {
+    const baseline = expenseAmountForMonth(item.expense, item.monthKey);
+    const amountOverrides = { ...normalizeExpense(item.expense).amountOverrides };
+    if (amount === baseline) {
+      delete amountOverrides[item.statusKey];
+    } else {
+      amountOverrides[item.statusKey] = amount;
+    }
+    updateExpense(item.expense.id, { amountOverrides });
   }
 
   function addExpense() {
@@ -869,7 +888,19 @@ export default function Home() {
                           ))}
                         </div>
                       </div>
-                      <span className={item.expense.kind === "credit" ? "credit-amount" : ""}>{itemAmountLabel(item)}</span>
+                      <label className="projected-amount">
+                        Amount
+                        <input
+                          type="number"
+                          value={item.amount}
+                          min={0}
+                          onChange={(event) => updateProjectedAmount(item, Number(event.target.value))}
+                          aria-label={`${item.expense.name} amount for ${item.occurrence.toLocaleDateString("en-US")}`}
+                        />
+                        {item.amount !== expenseAmountForMonth(item.expense, item.monthKey) && (
+                          <small>Baseline {itemAmountLabel({ ...item, amount: expenseAmountForMonth(item.expense, item.monthKey) })}</small>
+                        )}
+                      </label>
                     </li>
                   ))}
                   {check.expenses.length === 0 && <li className="empty-row">No scheduled expenses.</li>}
