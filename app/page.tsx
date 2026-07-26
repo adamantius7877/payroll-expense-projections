@@ -896,7 +896,7 @@ export default function Home() {
                           aria-label={`${item.expense.name} amount for ${item.occurrence.toLocaleDateString("en-US")}`}
                         />
                         {item.amount !== expenseAmountForMonth(item.expense, item.monthKey) && (
-                          <small>Baseline {itemAmountLabel({ ...item, amount: expenseAmountForMonth(item.expense, item.monthKey) })}</small>
+                          <small>Original {itemAmountLabel({ ...item, amount: expenseAmountForMonth(item.expense, item.monthKey) })}</small>
                         )}
                       </label>
                     </li>

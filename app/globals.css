@@ -667,9 +667,12 @@ button {
   .paycheck-card li {
     align-items: flex-start;
     flex-direction: column;
+    justify-content: flex-start;
+    gap: 12px;
   }
 
   .paycheck-card li > div {
+    flex-basis: auto;
     min-width: 0;
     width: 100%;
   }
@@ -679,7 +682,7 @@ button {
   }
 
   .projected-amount {
-    width: min(100%, 180px);
+    width: min(100%, 220px);
     flex-basis: auto;
     text-align: left;
   }
