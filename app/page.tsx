@@ -324,28 +324,11 @@ function buildPaychecks(state: AppState): Paycheck[] {
     cursor = nextPayDate(cursor, state.frequency);
   }
 
-  const occurrences: ProjectedExpense[] = [];
-  const months = Array.from({ length: state.monthsAhead + 1 }, (_, index) => addMonths(start, index));
+  const displayedChecks = checks.filter((check) => check.date <= end);
 
-  months.forEach((monthDate) => {
-    const key = monthKey(monthDate);
-    state.expenses.map(normalizeExpense).forEach((expense) => {
-      if (expense.recurrence === "per-paycheck" || !expenseRunsInMonth(expense, monthDate)) return;
-      const amount = expenseAmountForMonth(expense, key);
-      if (amount <= 0) return;
-      const occurrence = new Date(monthDate.getFullYear(), monthDate.getMonth(), Math.min(expense.dueDay, 28), 12);
-      if (occurrence < start || occurrence > end) return;
-      occurrences.push({
-        expense,
-        occurrence,
-        monthKey: key,
-        amount,
-        status: expense.statuses[key] || "not-paid",
-      });
-    });
-  });
+  displayedChecks.forEach((check, checkIndex) => {
+    const periodEnd = checks[checkIndex + 1]?.date || nextPayDate(check.date, state.frequency);
 
-  checks.forEach((check) => {
     state.expenses.map(normalizeExpense).forEach((expense) => {
       if (expense.recurrence !== "per-paycheck") return;
       const key = monthKey(check.date);
@@ -360,21 +343,44 @@ function buildPaychecks(state: AppState): Paycheck[] {
       });
       check.remaining -= amount;
     });
+
+    const monthCursor = new Date(check.date.getFullYear(), check.date.getMonth(), 1, 12);
+    const finalMonth = new Date(periodEnd.getFullYear(), periodEnd.getMonth(), 1, 12);
+
+    while (monthCursor <= finalMonth) {
+      const key = monthKey(monthCursor);
+      state.expenses.map(normalizeExpense).forEach((expense) => {
+        if (expense.recurrence === "per-paycheck" || !expenseRunsInMonth(expense, monthCursor)) return;
+        const amount = expenseAmountForMonth(expense, key);
+        if (amount <= 0) return;
+        const occurrence = new Date(
+          monthCursor.getFullYear(),
+          monthCursor.getMonth(),
+          Math.min(expense.dueDay, 28),
+          12,
+        );
+        if (occurrence < check.date || occurrence >= periodEnd) return;
+        check.expenses.push({
+          expense,
+          occurrence,
+          monthKey: key,
+          amount,
+          status: expense.statuses[key] || "not-paid",
+        });
+        check.remaining -= amount;
+      });
+
+      monthCursor.setMonth(monthCursor.getMonth() + 1);
+    }
+
+    check.expenses.sort((a, b) => {
+      const dateSort = a.occurrence.getTime() - b.occurrence.getTime();
+      if (dateSort !== 0) return dateSort;
+      return a.expense.name.localeCompare(b.expense.name);
+    });
   });
 
-  occurrences
-    .sort((a, b) => a.occurrence.getTime() - b.occurrence.getTime())
-    .forEach((occurrence) => {
-      const index = checks.findIndex((check, checkIndex) => {
-        const next = checks[checkIndex + 1]?.date || addDays(end, 45);
-        return occurrence.occurrence >= check.date && occurrence.occurrence < next;
-      });
-      const target = checks[Math.max(0, index)];
-      target.expenses.push(occurrence);
-      target.remaining -= occurrence.amount;
-    });
-
-  return checks.filter((check) => check.date <= end);
+  return displayedChecks;
 }
 
 export default function Home() {
