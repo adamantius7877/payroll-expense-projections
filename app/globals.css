@@ -232,6 +232,18 @@ button {
   white-space: nowrap;
 }
 
+.paycheck-totals .open-status {
+  border-color: #e0ad92;
+  background: #fff3ea;
+  color: #8d3a25;
+}
+
+.paycheck-totals .paid-status {
+  border-color: #afd3c8;
+  background: #eef8f4;
+  color: #235f55;
+}
+
 .meter {
   height: 8px;
   background: #eee5d8;

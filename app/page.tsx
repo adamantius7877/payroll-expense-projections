@@ -332,6 +332,12 @@ function statusForOccurrence(expense: Expense, key: string, fallbackMonthKey: st
   return expense.statuses[key] || expense.statuses[fallbackMonthKey] || "not-paid";
 }
 
+function unpaidSummary(check: Paycheck) {
+  const unpaidCount = check.expenses.filter((item) => item.status === "not-paid").length;
+  if (unpaidCount === 0) return "All Paid";
+  return `${unpaidCount} unpaid ${unpaidCount === 1 ? "item" : "items"}`;
+}
+
 function nextPayDate(current: Date, frequency: Frequency) {
   if (frequency === "weekly") return addDays(current, 7);
   if (frequency === "biweekly") return addDays(current, 14);
@@ -708,6 +714,9 @@ export default function Home() {
                     <p>{check.date.toLocaleDateString("en-US", { weekday: "short" })}</p>
                     <h2>{check.label}</h2>
                     <div className="paycheck-totals">
+                      <span className={check.expenses.some((item) => item.status === "not-paid") ? "open-status" : "paid-status"}>
+                        {unpaidSummary(check)}
+                      </span>
                       <span>Expenses {money(check.expenseTotal)}</span>
                       {check.creditTotal > 0 && <span>Credits +{money(check.creditTotal)}</span>}
                       <span>Difference {money(check.remaining)}</span>
