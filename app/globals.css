@@ -357,12 +357,18 @@ button {
 
 .toolbar-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
+  justify-content: flex-end;
 }
 
 .toolbar-actions select {
   width: 150px;
+}
+
+.toolbar-actions input[type="search"] {
+  width: 190px;
 }
 
 .expense-table {
@@ -386,6 +392,17 @@ button {
   font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.expense-row.header button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .expense-row input,
@@ -449,6 +466,10 @@ button {
   }
 
   .toolbar-actions select {
+    width: 100%;
+  }
+
+  .toolbar-actions input[type="search"] {
     width: 100%;
   }
 

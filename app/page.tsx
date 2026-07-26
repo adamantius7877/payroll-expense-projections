@@ -7,6 +7,9 @@ type Status = "not-paid" | "paid" | "cleared";
 type Category = "first-half" | "second-half" | "flex";
 type Recurrence = "per-paycheck" | "monthly" | "selected-months" | "annual";
 type ItemKind = "expense" | "credit";
+type ExpenseSortKey = "name" | "kind" | "amount" | "dueDay" | "category" | "recurrence";
+type FilterKey = "all" | ExpenseSortKey;
+type SortDirection = "asc" | "desc";
 
 type Expense = {
   id: string;
@@ -66,6 +69,15 @@ const monthNames = [
 ];
 
 const shortMonths = monthNames.map((month) => month.slice(0, 3));
+
+const expenseSortLabels: Record<ExpenseSortKey, string> = {
+  name: "Name",
+  kind: "Type",
+  amount: "Amount",
+  dueDay: "Due",
+  category: "Group",
+  recurrence: "Schedule",
+};
 
 const defaultExpenses: Expense[] = [];
 
@@ -286,6 +298,47 @@ function normalizeCategory(value: string | undefined, dueDay: number): Category 
   return dueDay > 15 ? "second-half" : "first-half";
 }
 
+function categoryLabel(category: Category) {
+  if (category === "first-half") return "First half";
+  if (category === "second-half") return "Second half";
+  return "Flexible";
+}
+
+function kindLabel(kind: ItemKind) {
+  return kind === "credit" ? "Credit" : "Expense";
+}
+
+function recurrenceFilterLabel(expense: Expense) {
+  const cleanExpense = normalizeExpense(expense);
+  if (cleanExpense.recurrence === "per-paycheck") return "Per paycheck";
+  if (cleanExpense.recurrence === "monthly") return "Per month";
+  if (cleanExpense.recurrence === "annual") return `Once a year ${monthNames[cleanExpense.annualMonth]}`;
+  return `Certain months ${cleanExpense.activeMonths.map((month) => shortMonths[month]).join(" ")}`;
+}
+
+function dueDayForCategory(category: Category, currentDueDay: number) {
+  if (category === "first-half") return 1;
+  if (category === "second-half") return 15;
+  return currentDueDay || 1;
+}
+
+function expenseFieldValue(expense: Expense, key: ExpenseSortKey, selectedMonth: string) {
+  const cleanExpense = normalizeExpense(expense);
+  if (key === "name") return cleanExpense.name;
+  if (key === "kind") return kindLabel(cleanExpense.kind);
+  if (key === "amount") return expenseAmountForMonth(cleanExpense, selectedMonth);
+  if (key === "dueDay") return cleanExpense.dueDay;
+  if (key === "category") return categoryLabel(cleanExpense.category);
+  return recurrenceFilterLabel(cleanExpense);
+}
+
+function expenseSearchText(expense: Expense, selectedMonth: string) {
+  return (Object.keys(expenseSortLabels) as ExpenseSortKey[])
+    .map((key) => String(expenseFieldValue(expense, key, selectedMonth)))
+    .join(" ")
+    .toLowerCase();
+}
+
 function expenseRunsInMonth(expense: Expense, date: Date) {
   const cleanExpense = normalizeExpense(expense);
   const month = date.getMonth();
@@ -439,6 +492,11 @@ export default function Home() {
   const [importMessage, setImportMessage] = useState("Ready to import a Google Sheet CSV.");
   const [isLoaded, setIsLoaded] = useState(false);
   const [saveStatus, setSaveStatus] = useState("Loading shared household data...");
+  const [expenseSearch, setExpenseSearch] = useState("");
+  const [filterKey, setFilterKey] = useState<FilterKey>("all");
+  const [filterValue, setFilterValue] = useState("");
+  const [sortKey, setSortKey] = useState<ExpenseSortKey>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -516,9 +574,41 @@ export default function Home() {
     [paychecks, selectedMonth, state.expenses],
   );
   const tightChecks = paychecks.filter((check) => check.remaining < state.threshold);
+  const displayedExpenses = useMemo(() => {
+    const search = expenseSearch.trim().toLowerCase();
+    const filter = filterValue.trim().toLowerCase();
+
+    return state.expenses
+      .map(normalizeExpense)
+      .filter((expense) => {
+        const matchesSearch = !search || expenseSearchText(expense, selectedMonth).includes(search);
+        if (!matchesSearch) return false;
+        if (!filter) return true;
+        if (filterKey === "all") return expenseSearchText(expense, selectedMonth).includes(filter);
+        return String(expenseFieldValue(expense, filterKey, selectedMonth)).toLowerCase().includes(filter);
+      })
+      .sort((left, right) => {
+        const leftValue = expenseFieldValue(left, sortKey, selectedMonth);
+        const rightValue = expenseFieldValue(right, sortKey, selectedMonth);
+        const direction = sortDirection === "asc" ? 1 : -1;
+        if (typeof leftValue === "number" && typeof rightValue === "number") {
+          return (leftValue - rightValue) * direction;
+        }
+        return String(leftValue).localeCompare(String(rightValue), undefined, { numeric: true }) * direction;
+      });
+  }, [expenseSearch, filterKey, filterValue, selectedMonth, sortDirection, sortKey, state.expenses]);
 
   function updateState<K extends keyof AppState>(key: K, value: AppState[K]) {
     setState((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateExpenseSort(key: ExpenseSortKey) {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDirection("asc");
   }
 
   function updateExpense(id: string, patch: Partial<Expense>) {
@@ -538,6 +628,13 @@ export default function Home() {
         recurrence === "selected-months" && !expense.activeMonths.length ? [month] : expense.activeMonths,
       annualMonth: recurrence === "annual" ? month : expense.annualMonth,
       monthlyAmounts: recurrence === "per-paycheck" || recurrence === "monthly" ? {} : expense.monthlyAmounts,
+    });
+  }
+
+  function updateExpenseCategory(expense: Expense, category: Category) {
+    updateExpense(expense.id, {
+      category,
+      dueDay: dueDayForCategory(category, expense.dueDay),
     });
   }
 
@@ -765,9 +862,34 @@ export default function Home() {
             <div className="table-toolbar">
               <div>
                 <h2>Expense register</h2>
-                <p>{monthLabel(selectedMonth)} total: {money(selectedTotal)}</p>
+                <p>
+                  {monthLabel(selectedMonth)} total: {money(selectedTotal)} - Showing {displayedExpenses.length} of{" "}
+                  {state.expenses.length}
+                </p>
               </div>
               <div className="toolbar-actions">
+                <input
+                  type="search"
+                  value={expenseSearch}
+                  onChange={(event) => setExpenseSearch(event.target.value)}
+                  placeholder="Search expenses"
+                  aria-label="Search expenses"
+                />
+                <select value={filterKey} onChange={(event) => setFilterKey(event.target.value as FilterKey)} aria-label="Filter field">
+                  <option value="all">Any field</option>
+                  {(Object.keys(expenseSortLabels) as ExpenseSortKey[]).map((key) => (
+                    <option value={key} key={key}>
+                      {expenseSortLabels[key]}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="search"
+                  value={filterValue}
+                  onChange={(event) => setFilterValue(event.target.value)}
+                  placeholder="Filter value"
+                  aria-label="Filter value"
+                />
                 <select value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)}>
                   {Array.from({ length: 12 }, (_, index) => {
                     const date = addMonths(new Date(), index);
@@ -787,15 +909,15 @@ export default function Home() {
 
             <div className="expense-table">
               <div className="expense-row header">
-                <span>Name</span>
-                <span>Type</span>
-                <span>Amount</span>
-                <span>Due</span>
-                <span>Group</span>
-                <span>Schedule</span>
+                {(Object.keys(expenseSortLabels) as ExpenseSortKey[]).map((key) => (
+                  <button type="button" onClick={() => updateExpenseSort(key)} key={key}>
+                    {expenseSortLabels[key]}
+                    {sortKey === key ? (sortDirection === "asc" ? " Asc" : " Desc") : ""}
+                  </button>
+                ))}
                 <span></span>
               </div>
-              {state.expenses.map((rawExpense) => {
+              {displayedExpenses.map((rawExpense) => {
                 const expense = normalizeExpense(rawExpense);
                 return (
                 <div className="expense-row" key={expense.id}>
@@ -826,7 +948,7 @@ export default function Home() {
                     max={31}
                     onChange={(event) => updateExpense(expense.id, { dueDay: Number(event.target.value) })}
                   />
-                  <select value={expense.category} onChange={(event) => updateExpense(expense.id, { category: event.target.value as Category })}>
+                  <select value={expense.category} onChange={(event) => updateExpenseCategory(expense, event.target.value as Category)}>
                     <option value="first-half">First half</option>
                     <option value="second-half">Second half</option>
                     <option value="flex">Flexible</option>
