@@ -341,6 +341,23 @@ button {
   color: var(--danger);
 }
 
+.paycheck-actions {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.collapse-button {
+  min-height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-soft);
+  color: var(--muted-strong);
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .paycheck-totals {
   display: flex;
   flex-wrap: wrap;
@@ -396,11 +413,10 @@ button {
 }
 
 .paycheck-card li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(82px, 96px);
+  align-items: start;
+  gap: 12px;
   min-height: 58px;
   min-width: 0;
   background: var(--surface);
@@ -408,7 +424,6 @@ button {
 }
 
 .paycheck-card li > div {
-  flex: 1 1 220px;
   min-width: 0;
 }
 
@@ -430,8 +445,8 @@ button {
 
 .projected-status {
   display: inline-grid;
-  grid-template-columns: repeat(3, minmax(54px, 1fr));
-  width: min(100%, 328px);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: min(100%, 260px);
   margin-top: 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -440,7 +455,7 @@ button {
 }
 
 .projected-status button {
-  min-height: 30px;
+  min-height: 28px;
   border: 0;
   border-right: 1px solid var(--border);
   background: transparent;
@@ -460,8 +475,7 @@ button {
 
 .projected-amount {
   display: grid;
-  flex: 0 1 132px;
-  max-width: 160px;
+  width: 100%;
   gap: 5px;
   color: var(--muted);
   font-size: 11px;
@@ -471,7 +485,7 @@ button {
 
 .projected-amount input {
   min-width: 0;
-  padding: 7px 8px;
+  padding: 6px 8px;
   text-align: right;
 }
 
@@ -654,6 +668,10 @@ button {
     white-space: normal;
   }
 
+  .paycheck-actions {
+    justify-items: start;
+  }
+
   .paycheck-totals {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -665,14 +683,13 @@ button {
   }
 
   .paycheck-card li {
+    grid-template-columns: minmax(0, 1fr);
     align-items: flex-start;
-    flex-direction: column;
     justify-content: flex-start;
     gap: 12px;
   }
 
   .paycheck-card li > div {
-    flex-basis: auto;
     min-width: 0;
     width: 100%;
   }
@@ -683,7 +700,6 @@ button {
 
   .projected-amount {
     width: min(100%, 220px);
-    flex-basis: auto;
     text-align: left;
   }
 

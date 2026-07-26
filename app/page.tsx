@@ -513,6 +513,7 @@ export default function Home() {
   const [filterValue, setFilterValue] = useState("");
   const [sortKey, setSortKey] = useState<ExpenseSortKey>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [collapsedChecks, setCollapsedChecks] = useState<Record<string, boolean>>({});
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -678,6 +679,10 @@ export default function Home() {
     updateExpense(item.expense.id, { amountOverrides });
   }
 
+  function togglePaycheckCollapsed(key: string) {
+    setCollapsedChecks((current) => ({ ...current, [key]: !current[key] }));
+  }
+
   function addExpense() {
     setState((current) => ({
       ...current,
@@ -841,70 +846,89 @@ export default function Home() {
           )}
 
           <div className="projection-grid">
-            {paychecks.map((check) => (
-              <article className={check.remaining < state.threshold ? "paycheck-card tight" : "paycheck-card"} key={check.date.toISOString()}>
-                <div className="paycheck-head">
-                  <div>
-                    <p>{check.date.toLocaleDateString("en-US", { weekday: "short" })}</p>
-                    <h2>{check.label}</h2>
-                    <div className="paycheck-totals">
-                      <span className={check.expenses.some((item) => item.status === "not-paid") ? "open-status" : "paid-status"}>
-                        {unpaidSummary(check)}
-                      </span>
-                      <span>Expenses {money(check.expenseTotal)}</span>
-                      {check.creditTotal > 0 && <span>Credits +{money(check.creditTotal)}</span>}
-                      <span>Difference {money(check.remaining)}</span>
+            {paychecks.map((check) => {
+              const checkKey = isoDate(check.date);
+              const isCollapsed = Boolean(collapsedChecks[checkKey]);
+
+              return (
+                <article className={check.remaining < state.threshold ? "paycheck-card tight" : "paycheck-card"} key={check.date.toISOString()}>
+                  <div className="paycheck-head">
+                    <div>
+                      <p>{check.date.toLocaleDateString("en-US", { weekday: "short" })}</p>
+                      <h2>{check.label}</h2>
+                      <div className="paycheck-totals">
+                        <span className={check.expenses.some((item) => item.status === "not-paid") ? "open-status" : "paid-status"}>
+                          {unpaidSummary(check)}
+                        </span>
+                        <span>Expenses {money(check.expenseTotal)}</span>
+                        {check.creditTotal > 0 && <span>Credits +{money(check.creditTotal)}</span>}
+                        <span>Difference {money(check.remaining)}</span>
+                      </div>
+                    </div>
+                    <div className="paycheck-actions">
+                      <span className="remaining-total">{money(check.remaining)}</span>
+                      <button
+                        type="button"
+                        className="collapse-button"
+                        aria-expanded={!isCollapsed}
+                        onClick={() => togglePaycheckCollapsed(checkKey)}
+                      >
+                        {isCollapsed ? "Expand" : "Collapse"}
+                      </button>
                     </div>
                   </div>
-                  <span className="remaining-total">{money(check.remaining)}</span>
-                </div>
-                <div className="meter" aria-hidden="true">
-                  <span style={{ width: `${Math.max(0, Math.min(100, (check.remaining / check.income) * 100))}%` }} />
-                </div>
-                <ul>
-                  {check.expenses.map((item, index) => (
-                    <li key={`${item.expense.id}-${item.monthKey}-${index}`}>
-                      <div>
-                        <strong>{item.expense.name}</strong>
-                        <small>
-                          Due {item.occurrence.toLocaleDateString("en-US", { month: "short", day: "numeric" })} -{" "}
-                          {item.status.replace("-", " ")} - {recurrenceLabel(item.expense)}
-                        </small>
-                        <div
-                          className="projected-status"
-                          aria-label={`${item.expense.name} status for ${item.occurrence.toLocaleDateString("en-US")}`}
-                        >
-                          {(["not-paid", "paid", "cleared"] as Status[]).map((status) => (
-                            <button
-                              type="button"
-                              className={item.status === status ? "active" : ""}
-                              onClick={() => updateProjectedStatus(item, status)}
-                              key={status}
-                            >
-                              {status === "not-paid" ? "Open" : status === "paid" ? "Paid" : "Cleared"}
-                            </button>
-                          ))}
-                        </div>
+                  {!isCollapsed && (
+                    <>
+                      <div className="meter" aria-hidden="true">
+                        <span style={{ width: `${Math.max(0, Math.min(100, (check.remaining / check.income) * 100))}%` }} />
                       </div>
-                      <label className="projected-amount">
-                        Amount
-                        <input
-                          type="number"
-                          value={item.amount}
-                          min={0}
-                          onChange={(event) => updateProjectedAmount(item, Number(event.target.value))}
-                          aria-label={`${item.expense.name} amount for ${item.occurrence.toLocaleDateString("en-US")}`}
-                        />
-                        {item.amount !== expenseAmountForMonth(item.expense, item.monthKey) && (
-                          <small>Original {itemAmountLabel({ ...item, amount: expenseAmountForMonth(item.expense, item.monthKey) })}</small>
-                        )}
-                      </label>
-                    </li>
-                  ))}
-                  {check.expenses.length === 0 && <li className="empty-row">No scheduled expenses.</li>}
-                </ul>
-              </article>
-            ))}
+                      <ul>
+                        {check.expenses.map((item, index) => (
+                          <li key={`${item.expense.id}-${item.monthKey}-${index}`}>
+                            <div>
+                              <strong>{item.expense.name}</strong>
+                              <small>
+                                Due {item.occurrence.toLocaleDateString("en-US", { month: "short", day: "numeric" })} -{" "}
+                                {item.status.replace("-", " ")} - {recurrenceLabel(item.expense)}
+                              </small>
+                              <div
+                                className="projected-status"
+                                aria-label={`${item.expense.name} status for ${item.occurrence.toLocaleDateString("en-US")}`}
+                              >
+                                {(["not-paid", "paid", "cleared"] as Status[]).map((status) => (
+                                  <button
+                                    type="button"
+                                    className={item.status === status ? "active" : ""}
+                                    onClick={() => updateProjectedStatus(item, status)}
+                                    key={status}
+                                  >
+                                    {status === "not-paid" ? "Open" : status === "paid" ? "Paid" : "Cleared"}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <label className="projected-amount">
+                              Amount
+                              <input
+                                type="number"
+                                value={item.amount}
+                                min={0}
+                                onChange={(event) => updateProjectedAmount(item, Number(event.target.value))}
+                                aria-label={`${item.expense.name} amount for ${item.occurrence.toLocaleDateString("en-US")}`}
+                              />
+                              {item.amount !== expenseAmountForMonth(item.expense, item.monthKey) && (
+                                <small>Original {itemAmountLabel({ ...item, amount: expenseAmountForMonth(item.expense, item.monthKey) })}</small>
+                              )}
+                            </label>
+                          </li>
+                        ))}
+                        {check.expenses.length === 0 && <li className="empty-row">No scheduled expenses.</li>}
+                      </ul>
+                    </>
+                  )}
+                </article>
+              );
+            })}
           </div>
 
           <div className="expense-manager">
