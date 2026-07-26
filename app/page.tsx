@@ -286,7 +286,9 @@ function recurrenceLabel(expense: Expense) {
 
 function expenseAmountForMonth(expense: Expense, key: string) {
   const cleanExpense = normalizeExpense(expense);
-  if (cleanExpense.recurrence === "per-paycheck") return cleanExpense.amount;
+  if (cleanExpense.recurrence === "per-paycheck" || cleanExpense.recurrence === "monthly") {
+    return cleanExpense.amount;
+  }
   return cleanExpense.monthlyAmounts[key] ?? cleanExpense.amount;
 }
 
@@ -478,7 +480,7 @@ export default function Home() {
       activeMonths:
         recurrence === "selected-months" && !expense.activeMonths.length ? [month] : expense.activeMonths,
       annualMonth: recurrence === "annual" ? month : expense.annualMonth,
-      monthlyAmounts: recurrence === "per-paycheck" ? {} : expense.monthlyAmounts,
+      monthlyAmounts: recurrence === "per-paycheck" || recurrence === "monthly" ? {} : expense.monthlyAmounts,
     });
   }
 
@@ -727,7 +729,7 @@ export default function Home() {
                       updateExpense(expense.id, {
                         amount,
                         monthlyAmounts:
-                          expense.recurrence === "per-paycheck"
+                          expense.recurrence === "per-paycheck" || expense.recurrence === "monthly"
                             ? {}
                             : { ...expense.monthlyAmounts, [selectedMonth]: amount },
                       });
