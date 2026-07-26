@@ -9,11 +9,15 @@ let initialized = false;
 
 function getPool() {
   const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error("DATABASE_URL is not configured.");
-  }
-
-  pool ??= new Pool({ connectionString });
+  pool ??= connectionString
+    ? new Pool({ connectionString })
+    : new Pool({
+        host: process.env.PGHOST,
+        port: Number(process.env.PGPORT || 5432),
+        database: process.env.PGDATABASE,
+        user: process.env.PGUSER,
+        password: process.env.PGPASSWORD,
+      });
   return pool;
 }
 

@@ -39,7 +39,7 @@ $env:POSTGRES_PASSWORD = "choose-a-local-password"
 docker compose up -d --build
 ```
 
-Open `http://localhost:3001` on that Windows machine. From another device on your network, open `http://WINDOWS_SERVER_IP:3001`.
+Open `http://localhost:3001` on that Windows machine. From another device on your network, open `http://WINDOWS_SERVER_IP:3001`. Include `:3001`; opening only `http://WINDOWS_SERVER_IP` will try the wrong port.
 
 The Postgres data is stored in the Docker volume named `payroll_expense_data`, so normal container rebuilds keep your saved dashboard data.
 
@@ -49,6 +49,15 @@ To update an existing Windows Docker deployment after pulling new code:
 git pull
 $env:POSTGRES_PASSWORD = "choose-a-local-password"
 docker compose up -d --build
+```
+
+If another device cannot reach it, allow inbound TCP port `3001` through Windows Defender Firewall on the Docker host.
+
+To check the running containers:
+
+```powershell
+docker compose ps
+docker compose logs --tail=100 payroll-expense-projections
 ```
 
 ## Deploy With Docker Compose On Linux
