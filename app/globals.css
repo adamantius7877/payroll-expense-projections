@@ -397,6 +397,7 @@ button {
 
 .paycheck-card li {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
@@ -404,6 +405,11 @@ button {
   min-width: 0;
   background: var(--surface);
   padding: 10px 14px;
+}
+
+.paycheck-card li > div {
+  flex: 1 1 220px;
+  min-width: 0;
 }
 
 .paycheck-card li strong,
@@ -425,6 +431,7 @@ button {
 .projected-status {
   display: inline-grid;
   grid-template-columns: repeat(3, minmax(54px, 1fr));
+  width: min(100%, 328px);
   margin-top: 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -453,7 +460,8 @@ button {
 
 .projected-amount {
   display: grid;
-  flex: 0 0 112px;
+  flex: 0 1 132px;
+  max-width: 160px;
   gap: 5px;
   color: var(--muted);
   font-size: 11px;
@@ -462,6 +470,7 @@ button {
 }
 
 .projected-amount input {
+  min-width: 0;
   padding: 7px 8px;
   text-align: right;
 }
