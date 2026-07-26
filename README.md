@@ -17,23 +17,34 @@ pnpm dev
 pnpm build
 ```
 
-## Deploy With Docker Compose
+## Deploy With Docker Desktop On Windows
 
-On the server:
-
-```bash
-git clone https://github.com/adamantius7877/payroll-expense-projections.git
-cd payroll-expense-projections
-APP_PORT=3001 ./scripts/deploy-docker.sh
-```
-
-On Windows PowerShell:
+In PowerShell:
 
 ```powershell
 git clone https://github.com/adamantius7877/payroll-expense-projections.git
 cd payroll-expense-projections
 $env:APP_PORT = "3001"
 .\scripts\deploy-docker.ps1
+```
+
+Or run Docker Compose directly:
+
+```powershell
+git clone https://github.com/adamantius7877/payroll-expense-projections.git
+cd payroll-expense-projections
+$env:APP_PORT = "3001"
+docker compose up -d --build
+```
+
+Open `http://localhost:3001` on that Windows machine. From another device on your network, open `http://WINDOWS_SERVER_IP:3001`.
+
+## Deploy With Docker Compose On Linux
+
+```bash
+git clone https://github.com/adamantius7877/payroll-expense-projections.git
+cd payroll-expense-projections
+APP_PORT=3001 ./scripts/deploy-docker.sh
 ```
 
 Open `http://SERVER_IP:3001`, or change `APP_PORT` to expose a different host port.
