@@ -19,6 +19,7 @@
 html {
   min-width: 0;
   width: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -28,6 +29,7 @@ body {
   font-family: Arial, Helvetica, sans-serif;
   min-width: 0;
   width: 100%;
+  overflow-x: hidden;
 }
 
 button,
@@ -499,15 +501,22 @@ button {
 
 .expense-table {
   display: grid;
-  overflow-x: auto;
+  overflow-x: visible;
 }
 
 .expense-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.3fr) 110px 110px 76px 130px minmax(260px, 1fr) 86px;
+  grid-template-columns:
+    minmax(140px, 1.4fr)
+    minmax(92px, 0.8fr)
+    minmax(82px, 0.7fr)
+    minmax(58px, 0.45fr)
+    minmax(112px, 0.9fr)
+    minmax(180px, 1.35fr)
+    minmax(62px, 0.45fr);
   gap: 8px;
   align-items: center;
-  min-width: 980px;
+  min-width: 0;
   padding: 10px 12px;
   border-bottom: 1px solid var(--meter-bg);
 }
@@ -568,6 +577,8 @@ button {
   border: 1px solid var(--danger-border);
   background: var(--danger-soft);
   color: var(--danger);
+  padding-left: 8px;
+  padding-right: 8px;
   font-size: 12px;
 }
 
@@ -658,6 +669,37 @@ button {
 
   .summary-strip {
     grid-template-columns: 1fr;
+  }
+
+  .expense-table {
+    overflow-x: visible;
+  }
+
+  .expense-row.header {
+    display: none;
+  }
+
+  .expense-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    min-width: 0;
+    padding: 12px;
+  }
+
+  .recurrence-cell {
+    min-width: 0;
+  }
+
+  .month-picker {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .month-picker button {
+    min-width: 0;
+  }
+
+  .remove-button {
+    width: 100%;
   }
 }
 
