@@ -36,6 +36,7 @@ type ProjectedExpense = {
   expense: Expense;
   occurrence: Date;
   monthKey: string;
+  statusKey: string;
   amount: number;
   status: Status;
 };
@@ -129,6 +130,10 @@ function addMonths(date: Date, months: number) {
 
 function monthKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function occurrenceStatusKey(date: Date) {
+  return `occurrence:${isoDate(date)}`;
 }
 
 function monthLabel(key: string) {
@@ -323,6 +328,10 @@ function itemAmountLabel(item: ProjectedExpense) {
   return `${prefix}${money(item.amount)}`;
 }
 
+function statusForOccurrence(expense: Expense, key: string, fallbackMonthKey: string) {
+  return expense.statuses[key] || expense.statuses[fallbackMonthKey] || "not-paid";
+}
+
 function nextPayDate(current: Date, frequency: Frequency) {
   if (frequency === "weekly") return addDays(current, 7);
   if (frequency === "biweekly") return addDays(current, 14);
@@ -365,14 +374,16 @@ function buildPaychecks(state: AppState): Paycheck[] {
     state.expenses.map(normalizeExpense).forEach((expense) => {
       if (expense.recurrence !== "per-paycheck") return;
       const key = monthKey(check.date);
+      const statusKey = occurrenceStatusKey(check.date);
       const amount = expenseAmountForMonth(expense, key);
       if (amount <= 0) return;
       applyProjectedItem(check, {
         expense,
         occurrence: check.date,
         monthKey: key,
+        statusKey,
         amount,
-        status: expense.statuses[key] || "not-paid",
+        status: statusForOccurrence(expense, statusKey, key),
       });
     });
 
@@ -392,12 +403,14 @@ function buildPaychecks(state: AppState): Paycheck[] {
           12,
         );
         if (occurrence < check.date || occurrence >= periodEnd) return;
+        const statusKey = occurrenceStatusKey(occurrence);
         applyProjectedItem(check, {
           expense,
           occurrence,
           monthKey: key,
+          statusKey,
           amount,
-          status: expense.statuses[key] || "not-paid",
+          status: statusForOccurrence(expense, statusKey, key),
         });
       });
 
@@ -529,9 +542,9 @@ export default function Home() {
     updateExpense(expense.id, { activeMonths });
   }
 
-  function updateMonthStatus(expense: Expense, status: Status) {
-    updateExpense(expense.id, {
-      statuses: { ...expense.statuses, [selectedMonth]: status },
+  function updateProjectedStatus(item: ProjectedExpense, status: Status) {
+    updateExpense(item.expense.id, {
+      statuses: { ...item.expense.statuses, [item.statusKey]: status },
     });
   }
 
@@ -714,6 +727,21 @@ export default function Home() {
                           Due {item.occurrence.toLocaleDateString("en-US", { month: "short", day: "numeric" })} -{" "}
                           {item.status.replace("-", " ")} - {recurrenceLabel(item.expense)}
                         </small>
+                        <div
+                          className="projected-status"
+                          aria-label={`${item.expense.name} status for ${item.occurrence.toLocaleDateString("en-US")}`}
+                        >
+                          {(["not-paid", "paid", "cleared"] as Status[]).map((status) => (
+                            <button
+                              type="button"
+                              className={item.status === status ? "active" : ""}
+                              onClick={() => updateProjectedStatus(item, status)}
+                              key={status}
+                            >
+                              {status === "not-paid" ? "Open" : status === "paid" ? "Paid" : "Cleared"}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                       <span className={item.expense.kind === "credit" ? "credit-amount" : ""}>{itemAmountLabel(item)}</span>
                     </li>
@@ -756,7 +784,6 @@ export default function Home() {
                 <span>Due</span>
                 <span>Group</span>
                 <span>Schedule</span>
-                <span>Status</span>
                 <span></span>
               </div>
               {state.expenses.map((rawExpense) => {
@@ -825,18 +852,6 @@ export default function Home() {
                         ))}
                       </select>
                     )}
-                  </div>
-                  <div className="segmented" aria-label={`${expense.name} payment status`}>
-                    {(["not-paid", "paid", "cleared"] as Status[]).map((status) => (
-                      <button
-                        type="button"
-                        className={(expense.statuses[selectedMonth] || "not-paid") === status ? "active" : ""}
-                        onClick={() => updateMonthStatus(expense, status)}
-                        key={status}
-                      >
-                        {status === "not-paid" ? "Open" : status === "paid" ? "Paid" : "Cleared"}
-                      </button>
-                    ))}
                   </div>
                   <button className="remove-button" type="button" onClick={() => removeExpense(expense.id)} aria-label={`Remove ${expense.name}`}>
                     Remove

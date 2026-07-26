@@ -282,6 +282,35 @@ button {
   text-transform: capitalize;
 }
 
+.projected-status {
+  display: inline-grid;
+  grid-template-columns: repeat(3, minmax(54px, 1fr));
+  margin-top: 8px;
+  border: 1px solid #d8ccbd;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fffdf8;
+}
+
+.projected-status button {
+  min-height: 30px;
+  border: 0;
+  border-right: 1px solid #d8ccbd;
+  background: transparent;
+  color: #594f45;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.projected-status button:last-child {
+  border-right: 0;
+}
+
+.projected-status button.active {
+  background: #2b7767;
+  color: #fff;
+}
+
 .paycheck-card li span {
   font-weight: 800;
   white-space: nowrap;
@@ -331,10 +360,10 @@ button {
 
 .expense-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.3fr) 110px 110px 76px 130px minmax(260px, 1fr) minmax(260px, 1fr) 86px;
+  grid-template-columns: minmax(180px, 1.3fr) 110px 110px 76px 130px minmax(260px, 1fr) 86px;
   gap: 8px;
   align-items: center;
-  min-width: 1260px;
+  min-width: 980px;
   padding: 10px 12px;
   border-bottom: 1px solid #eee5d8;
 }
@@ -375,34 +404,6 @@ button {
 
 .month-picker button.active {
   border-color: #235f55;
-  background: #2b7767;
-  color: #fff;
-}
-
-.segmented {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  border: 1px solid #d8ccbd;
-  border-radius: 6px;
-  overflow: hidden;
-  background: #fffdf8;
-}
-
-.segmented button {
-  min-height: 36px;
-  border: 0;
-  border-right: 1px solid #d8ccbd;
-  background: transparent;
-  color: #594f45;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.segmented button:last-child {
-  border-right: 0;
-}
-
-.segmented button.active {
   background: #2b7767;
   color: #fff;
 }
