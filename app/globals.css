@@ -16,11 +16,18 @@
   box-sizing: border-box;
 }
 
+html {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 button,
@@ -73,6 +80,7 @@ button {
   min-height: 100vh;
   background: var(--app-bg);
   color: var(--app-text);
+  overflow-x: hidden;
 }
 
 .app-shell[data-theme="halloween"] {
@@ -276,12 +284,14 @@ button {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 12px;
+  min-width: 0;
 }
 
 .paycheck-card {
   display: grid;
   align-content: start;
   min-height: 250px;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
@@ -388,6 +398,7 @@ button {
   justify-content: space-between;
   gap: 10px;
   min-height: 58px;
+  min-width: 0;
   background: var(--surface);
   padding: 10px 14px;
 }
@@ -572,6 +583,30 @@ button {
 }
 
 @media (max-width: 760px) {
+  .app-header > div,
+  .app-shell > div {
+    width: 100%;
+    max-width: none;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .projection-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .paycheck-head {
+    padding: 14px;
+  }
+
+  .paycheck-card li {
+    align-items: flex-start;
+  }
+
+  .paycheck-card li > div {
+    min-width: 0;
+  }
+
   .table-toolbar,
   .toolbar-actions,
   .alert-band {
