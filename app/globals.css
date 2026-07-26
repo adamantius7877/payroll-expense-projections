@@ -18,7 +18,7 @@
 
 html {
   min-width: 0;
-  overflow-x: hidden;
+  width: 100%;
 }
 
 body {
@@ -27,7 +27,7 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
   min-width: 0;
-  overflow-x: hidden;
+  width: 100%;
 }
 
 button,
@@ -80,7 +80,8 @@ button {
   min-height: 100vh;
   background: var(--app-bg);
   color: var(--app-text);
-  overflow-x: hidden;
+  min-width: 0;
+  width: 100%;
 }
 
 .app-shell[data-theme="halloween"] {
@@ -586,9 +587,15 @@ button {
   .app-header > div,
   .app-shell > div {
     width: 100%;
-    max-width: none;
+    max-width: 100%;
     padding-left: 12px;
     padding-right: 12px;
+  }
+
+  .control-panel,
+  .expense-manager,
+  .paycheck-card {
+    max-width: 100%;
   }
 
   .projection-grid {
@@ -596,15 +603,42 @@ button {
   }
 
   .paycheck-head {
+    flex-direction: column;
+    align-items: stretch;
     padding: 14px;
+  }
+
+  .paycheck-head .remaining-total {
+    white-space: normal;
+  }
+
+  .paycheck-totals {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .paycheck-totals span {
+    min-width: 0;
+    white-space: normal;
   }
 
   .paycheck-card li {
     align-items: flex-start;
+    flex-direction: column;
   }
 
   .paycheck-card li > div {
     min-width: 0;
+    width: 100%;
+  }
+
+  .paycheck-card li span {
+    white-space: normal;
+  }
+
+  .projected-status {
+    width: min(100%, 280px);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .table-toolbar,
