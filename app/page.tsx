@@ -1,0 +1,629 @@
+"use client";
+
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+
+type Frequency = "weekly" | "biweekly" | "semimonthly" | "monthly";
+type Status = "not-paid" | "paid" | "cleared";
+type Category = "first-half" | "second-half" | "flex";
+
+type Expense = {
+  id: string;
+  name: string;
+  amount: number;
+  dueDay: number;
+  category: Category;
+  statuses: Record<string, Status>;
+  monthlyAmounts: Record<string, number>;
+};
+
+type Paycheck = {
+  date: Date;
+  label: string;
+  income: number;
+  expenses: ProjectedExpense[];
+  remaining: number;
+};
+
+type ProjectedExpense = {
+  expense: Expense;
+  occurrence: Date;
+  monthKey: string;
+  amount: number;
+  status: Status;
+};
+
+type AppState = {
+  paycheckAmount: number;
+  frequency: Frequency;
+  nextPayDate: string;
+  threshold: number;
+  monthsAhead: number;
+  expenses: Expense[];
+};
+
+const storageKey = "pay-schedule-dashboard-v1";
+
+const monthNames = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+const shortMonths = monthNames.map((month) => month.slice(0, 3));
+
+const defaultExpenses: Expense[] = [];
+
+const defaultState: AppState = {
+  paycheckAmount: 0,
+  frequency: "biweekly",
+  nextPayDate: isoDate(new Date()),
+  threshold: 0,
+  monthsAhead: 4,
+  expenses: defaultExpenses,
+};
+
+function makeExpense(
+  name: string,
+  amount: number,
+  dueDay: number,
+  category: Category,
+  id = `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${dueDay}-${category}`,
+): Expense {
+  return {
+    id,
+    name,
+    amount,
+    dueDay,
+    category,
+    statuses: {},
+    monthlyAmounts: {},
+  };
+}
+
+function isoDate(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function addMonths(date: Date, months: number) {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+function monthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(key: string) {
+  const [year, month] = key.split("-").map(Number);
+  return `${shortMonths[month - 1]} ${year}`;
+}
+
+function money(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value || 0);
+}
+
+function normalizeStatus(value: string | undefined): Status {
+  const clean = (value || "").trim().toLowerCase();
+  if (clean === "c" || clean === "cleared") return "cleared";
+  if (clean === "p" || clean === "paid") return "paid";
+  return "not-paid";
+}
+
+function parseCurrency(value: string | undefined) {
+  if (!value) return 0;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "-") return 0;
+  const parsed = Number(trimmed.replace(/[$,\s]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseCsv(text: string) {
+  const rows: string[][] = [];
+  let field = "";
+  let row: string[] = [];
+  let quoted = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const next = text[i + 1];
+
+    if (char === '"' && quoted && next === '"') {
+      field += '"';
+      i += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      row.push(field);
+      field = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") i += 1;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+
+  row.push(field);
+  rows.push(row);
+  return rows.filter((cells) => cells.some((cell) => cell.trim()));
+}
+
+function parseImportedExpenses(text: string): Expense[] {
+  const rows = parseCsv(text);
+  const header = rows[0]?.map((cell) => cell.trim().toLowerCase()) || [];
+  const hasListHeaders =
+    header.includes("name") &&
+    (header.includes("amount") || header.includes("due date") || header.includes("due day"));
+
+  if (hasListHeaders) {
+    const nameIndex = header.indexOf("name");
+    const amountIndex = header.indexOf("amount");
+    const dueIndex = header.includes("due day")
+      ? header.indexOf("due day")
+      : header.indexOf("due date");
+    const statusIndex = header.indexOf("status");
+    const categoryIndex = header.indexOf("category");
+
+    return rows.slice(1).flatMap((row) => {
+      const name = row[nameIndex]?.trim();
+      if (!name) return [];
+      const dueDay = Math.min(31, Math.max(1, parseInt(row[dueIndex] || "1", 10) || 1));
+      const category = normalizeCategory(row[categoryIndex], dueDay);
+      const expense = makeExpense(name, parseCurrency(row[amountIndex]), dueDay, category);
+      if (statusIndex >= 0) {
+        expense.statuses[monthKey(new Date())] = normalizeStatus(row[statusIndex]);
+      }
+      return [expense];
+    });
+  }
+
+  const monthColumns = rows[0]
+    .map((cell, index) => ({ month: monthNames.findIndex((m) => m.toLowerCase() === cell.trim().toLowerCase()), index }))
+    .filter((item) => item.month >= 0);
+
+  const byName = new Map<string, Expense>();
+
+  rows.slice(1).forEach((row, rowIndex) => {
+    const name = (row[0] || row[row.length - 1] || "").trim();
+    if (!name || /total|remaining/i.test(name)) return;
+
+    const entries = monthColumns
+      .map(({ month, index }) => ({
+        key: `2026-${String(month + 1).padStart(2, "0")}`,
+        amount: parseCurrency(row[index]),
+        status: normalizeStatus(row[index + 1]),
+      }))
+      .filter((entry) => entry.amount > 0);
+
+    if (!entries.length) return;
+
+    const category: Category = rowIndex < 22 ? "first-half" : rowIndex < 30 ? "flex" : "second-half";
+    const dueDay = category === "second-half" ? 16 : category === "flex" ? 8 : 1;
+    const expense = byName.get(name) || makeExpense(name, entries[entries.length - 1].amount, dueDay, category);
+
+    entries.forEach((entry) => {
+      expense.monthlyAmounts[entry.key] = entry.amount;
+      expense.statuses[entry.key] = entry.status;
+      expense.amount = entry.amount;
+    });
+
+    byName.set(name, expense);
+  });
+
+  return Array.from(byName.values());
+}
+
+function normalizeCategory(value: string | undefined, dueDay: number): Category {
+  const clean = (value || "").toLowerCase();
+  if (clean.includes("second")) return "second-half";
+  if (clean.includes("flex") || clean.includes("other")) return "flex";
+  if (clean.includes("first")) return "first-half";
+  return dueDay > 15 ? "second-half" : "first-half";
+}
+
+function nextPayDate(current: Date, frequency: Frequency) {
+  if (frequency === "weekly") return addDays(current, 7);
+  if (frequency === "biweekly") return addDays(current, 14);
+  if (frequency === "monthly") return addMonths(current, 1);
+
+  const next = new Date(current);
+  const day = next.getDate();
+  if (day < 15) {
+    next.setDate(15);
+  } else {
+    next.setMonth(next.getMonth() + 1, 1);
+  }
+  return next;
+}
+
+function buildPaychecks(state: AppState): Paycheck[] {
+  const start = new Date(`${state.nextPayDate}T12:00:00`);
+  const end = addMonths(start, state.monthsAhead);
+  const checks: Paycheck[] = [];
+  let cursor = start;
+
+  while (cursor <= addDays(end, 31)) {
+    checks.push({
+      date: new Date(cursor),
+      label: cursor.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      income: state.paycheckAmount,
+      expenses: [],
+      remaining: state.paycheckAmount,
+    });
+    cursor = nextPayDate(cursor, state.frequency);
+  }
+
+  const occurrences: ProjectedExpense[] = [];
+  const months = Array.from({ length: state.monthsAhead + 1 }, (_, index) => addMonths(start, index));
+
+  months.forEach((monthDate) => {
+    const key = monthKey(monthDate);
+    state.expenses.forEach((expense) => {
+      const amount = expense.monthlyAmounts[key] ?? expense.amount;
+      if (amount <= 0) return;
+      const occurrence = new Date(monthDate.getFullYear(), monthDate.getMonth(), Math.min(expense.dueDay, 28), 12);
+      if (occurrence < start || occurrence > end) return;
+      occurrences.push({
+        expense,
+        occurrence,
+        monthKey: key,
+        amount,
+        status: expense.statuses[key] || "not-paid",
+      });
+    });
+  });
+
+  occurrences
+    .sort((a, b) => a.occurrence.getTime() - b.occurrence.getTime())
+    .forEach((occurrence) => {
+      const index = checks.findIndex((check, checkIndex) => {
+        const next = checks[checkIndex + 1]?.date || addDays(end, 45);
+        return occurrence.occurrence >= check.date && occurrence.occurrence < next;
+      });
+      const target = checks[Math.max(0, index)];
+      target.expenses.push(occurrence);
+      target.remaining -= occurrence.amount;
+    });
+
+  return checks.filter((check) => check.date <= end);
+}
+
+export default function Home() {
+  const [state, setState] = useState<AppState>(defaultState);
+  const [selectedMonth, setSelectedMonth] = useState(monthKey(new Date()));
+  const [importMessage, setImportMessage] = useState("Ready to import a Google Sheet CSV.");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(storageKey);
+    if (!saved) return;
+    try {
+      const parsed = JSON.parse(saved) as AppState;
+      setState({ ...defaultState, ...parsed });
+    } catch {
+      setImportMessage("Saved data could not be loaded, so starter values are showing.");
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(storageKey, JSON.stringify(state));
+  }, [state]);
+
+  const paychecks = useMemo(() => buildPaychecks(state), [state]);
+  const selectedTotal = useMemo(
+    () =>
+      state.expenses.reduce((sum, expense) => {
+        return sum + (expense.monthlyAmounts[selectedMonth] ?? expense.amount);
+      }, 0),
+    [selectedMonth, state.expenses],
+  );
+  const tightChecks = paychecks.filter((check) => check.remaining < state.threshold);
+
+  function updateState<K extends keyof AppState>(key: K, value: AppState[K]) {
+    setState((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateExpense(id: string, patch: Partial<Expense>) {
+    setState((current) => ({
+      ...current,
+      expenses: current.expenses.map((expense) => (expense.id === id ? { ...expense, ...patch } : expense)),
+    }));
+  }
+
+  function updateMonthStatus(expense: Expense, status: Status) {
+    updateExpense(expense.id, {
+      statuses: { ...expense.statuses, [selectedMonth]: status },
+    });
+  }
+
+function addExpense() {
+    setState((current) => ({
+      ...current,
+      expenses: [...current.expenses, makeExpense("New expense", 0, 1, "first-half", `expense-${Date.now()}`)],
+    }));
+  }
+
+  function removeExpense(id: string) {
+    setState((current) => ({
+      ...current,
+      expenses: current.expenses.filter((expense) => expense.id !== id),
+    }));
+  }
+
+  function exportData() {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "pay-schedule-dashboard.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importCsv(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const imported = parseImportedExpenses(text);
+    if (!imported.length) {
+      setImportMessage("I could not find expense rows in that CSV.");
+      return;
+    }
+    setState((current) => ({ ...current, expenses: imported }));
+    setSelectedMonth(imported[0] ? Object.keys(imported[0].monthlyAmounts)[0] || selectedMonth : selectedMonth);
+    setImportMessage(`Imported ${imported.length} expenses from ${file.name}.`);
+    event.target.value = "";
+  }
+
+  return (
+    <main className="min-h-screen bg-[#f7f4ef] text-[#211f1b]">
+      <section className="border-b border-[#ddd4c7] bg-[#fffaf2]">
+        <div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-6 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#6f5f4d]">Pay Schedule Dashboard</p>
+            <h1 className="mt-2 text-3xl font-semibold md:text-5xl">Payroll, bills, and expense planner</h1>
+            <p className="mt-3 max-w-3xl text-base text-[#665f55]">
+              Import your sheet, mark bills as paid or cleared, and see which paycheck carries each expense before it
+              hits the account.
+            </p>
+          </div>
+          <div className="summary-strip" aria-label="Projection summary">
+            <span>
+              <strong>{money(state.paycheckAmount)}</strong>
+              paycheck
+            </span>
+            <span>
+              <strong>{paychecks.length}</strong>
+              checks
+            </span>
+            <span className={tightChecks.length ? "warning" : ""}>
+              <strong>{tightChecks.length}</strong>
+              tight
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <div className="mx-auto grid max-w-7xl gap-5 px-5 py-5 xl:grid-cols-[360px_1fr]">
+        <aside className="control-panel">
+          <section>
+            <h2>Paycheck setup</h2>
+            <label>
+              Pay per paycheck
+              <input
+                type="number"
+                value={state.paycheckAmount}
+                min={0}
+                onChange={(event) => updateState("paycheckAmount", Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Pay frequency
+              <select value={state.frequency} onChange={(event) => updateState("frequency", event.target.value as Frequency)}>
+                <option value="biweekly">Bi-weekly</option>
+                <option value="weekly">Weekly</option>
+                <option value="semimonthly">Semi-monthly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </label>
+            <label>
+              Next paycheck date
+              <input
+                type="date"
+                value={state.nextPayDate}
+                onChange={(event) => updateState("nextPayDate", event.target.value)}
+              />
+            </label>
+            <label>
+              Tight-money threshold
+              <input
+                type="number"
+                value={state.threshold}
+                min={0}
+                onChange={(event) => updateState("threshold", Number(event.target.value))}
+              />
+            </label>
+            <label>
+              Projection window
+              <select value={state.monthsAhead} onChange={(event) => updateState("monthsAhead", Number(event.target.value))}>
+                <option value={2}>2 months</option>
+                <option value={4}>4 months</option>
+                <option value={6}>6 months</option>
+                <option value={12}>12 months</option>
+              </select>
+            </label>
+          </section>
+
+          <section>
+            <h2>Import and save</h2>
+            <input ref={fileRef} className="sr-only" type="file" accept=".csv,text/csv" onChange={importCsv} />
+            <button className="primary-button" type="button" onClick={() => fileRef.current?.click()}>
+              Import CSV
+            </button>
+            <button className="secondary-button" type="button" onClick={exportData}>
+              Export backup
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => {
+                window.localStorage.removeItem(storageKey);
+                setState(defaultState);
+                setImportMessage("Saved data was reset.");
+              }}
+            >
+              Reset saved data
+            </button>
+            <p className="status-note">{importMessage}</p>
+          </section>
+        </aside>
+
+        <section className="space-y-5">
+          {tightChecks.length > 0 && (
+            <div className="alert-band">
+              <strong>Money is tight on {tightChecks.length} paycheck{tightChecks.length > 1 ? "s" : ""}.</strong>
+              <span>
+                Lowest projected remainder: {money(Math.min(...tightChecks.map((check) => check.remaining)))}.
+              </span>
+            </div>
+          )}
+
+          <div className="projection-grid">
+            {paychecks.map((check) => (
+              <article className={check.remaining < state.threshold ? "paycheck-card tight" : "paycheck-card"} key={check.date.toISOString()}>
+                <div className="paycheck-head">
+                  <div>
+                    <p>{check.date.toLocaleDateString("en-US", { weekday: "short" })}</p>
+                    <h2>{check.label}</h2>
+                  </div>
+                  <span>{money(check.remaining)}</span>
+                </div>
+                <div className="meter" aria-hidden="true">
+                  <span style={{ width: `${Math.max(0, Math.min(100, (check.remaining / check.income) * 100))}%` }} />
+                </div>
+                <ul>
+                  {check.expenses.map((item, index) => (
+                    <li key={`${item.expense.id}-${item.monthKey}-${index}`}>
+                      <div>
+                        <strong>{item.expense.name}</strong>
+                        <small>
+                          Due {item.occurrence.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ·{" "}
+                          {item.status.replace("-", " ")}
+                        </small>
+                      </div>
+                      <span>{money(item.amount)}</span>
+                    </li>
+                  ))}
+                  {check.expenses.length === 0 && <li className="empty-row">No scheduled expenses.</li>}
+                </ul>
+              </article>
+            ))}
+          </div>
+
+          <div className="expense-manager">
+            <div className="table-toolbar">
+              <div>
+                <h2>Expense register</h2>
+                <p>{monthLabel(selectedMonth)} total: {money(selectedTotal)}</p>
+              </div>
+              <div className="toolbar-actions">
+                <select value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)}>
+                  {Array.from({ length: 12 }, (_, index) => {
+                    const date = addMonths(new Date(), index);
+                    const key = monthKey(date);
+                    return (
+                      <option value={key} key={key}>
+                        {monthLabel(key)}
+                      </option>
+                    );
+                  })}
+                </select>
+                <button className="primary-button compact" type="button" onClick={addExpense}>
+                  Add item
+                </button>
+              </div>
+            </div>
+
+            <div className="expense-table">
+              <div className="expense-row header">
+                <span>Name</span>
+                <span>Amount</span>
+                <span>Due</span>
+                <span>Group</span>
+                <span>Status</span>
+                <span></span>
+              </div>
+              {state.expenses.map((expense) => (
+                <div className="expense-row" key={expense.id}>
+                  <input value={expense.name} onChange={(event) => updateExpense(expense.id, { name: event.target.value })} />
+                  <input
+                    type="number"
+                    value={expense.monthlyAmounts[selectedMonth] ?? expense.amount}
+                    min={0}
+                    onChange={(event) => {
+                      const amount = Number(event.target.value);
+                      updateExpense(expense.id, {
+                        amount,
+                        monthlyAmounts: { ...expense.monthlyAmounts, [selectedMonth]: amount },
+                      });
+                    }}
+                  />
+                  <input
+                    type="number"
+                    value={expense.dueDay}
+                    min={1}
+                    max={31}
+                    onChange={(event) => updateExpense(expense.id, { dueDay: Number(event.target.value) })}
+                  />
+                  <select value={expense.category} onChange={(event) => updateExpense(expense.id, { category: event.target.value as Category })}>
+                    <option value="first-half">First half</option>
+                    <option value="second-half">Second half</option>
+                    <option value="flex">Flexible</option>
+                  </select>
+                  <div className="segmented" aria-label={`${expense.name} payment status`}>
+                    {(["not-paid", "paid", "cleared"] as Status[]).map((status) => (
+                      <button
+                        type="button"
+                        className={(expense.statuses[selectedMonth] || "not-paid") === status ? "active" : ""}
+                        onClick={() => updateMonthStatus(expense, status)}
+                        key={status}
+                      >
+                        {status === "not-paid" ? "Open" : status === "paid" ? "Paid" : "Cleared"}
+                      </button>
+                    ))}
+                  </div>
+                  <button className="remove-button" type="button" onClick={() => removeExpense(expense.id)} aria-label={`Remove ${expense.name}`}>
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}

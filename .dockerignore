@@ -1,0 +1,15 @@
+.git
+.next
+.vinext
+.wrangler
+dist
+node_modules
+outputs
+work
+.env
+.env.*
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.pem

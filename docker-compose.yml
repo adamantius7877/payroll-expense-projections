@@ -1,0 +1,13 @@
+services:
+  payroll-expense-projections:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: payroll-expense-projections:latest
+    container_name: payroll-expense-projections
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
