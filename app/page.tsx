@@ -453,7 +453,6 @@ function buildPaychecks(state: AppState): Paycheck[] {
       const key = monthKey(check.date);
       const statusKey = occurrenceStatusKey(check.date);
       const amount = projectedAmountForOccurrence(expense, statusKey, key);
-      if (amount <= 0) return;
       applyProjectedItem(check, {
         expense,
         occurrence: check.date,
@@ -480,7 +479,6 @@ function buildPaychecks(state: AppState): Paycheck[] {
         if (occurrence < check.date || occurrence >= periodEnd) return;
         const statusKey = occurrenceStatusKey(occurrence);
         const amount = projectedAmountForOccurrence(expense, statusKey, key);
-        if (amount <= 0) return;
         applyProjectedItem(check, {
           expense,
           occurrence,
