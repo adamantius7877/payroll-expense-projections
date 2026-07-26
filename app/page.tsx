@@ -10,6 +10,7 @@ type ItemKind = "expense" | "credit";
 type ExpenseSortKey = "name" | "kind" | "amount" | "dueDay" | "category" | "recurrence";
 type FilterKey = "all" | ExpenseSortKey;
 type SortDirection = "asc" | "desc";
+type AppTheme = "classic" | "halloween" | "sakura" | "hotline";
 
 type Expense = {
   id: string;
@@ -50,6 +51,7 @@ type AppState = {
   nextPayDate: string;
   threshold: number;
   monthsAhead: number;
+  theme: AppTheme;
   expenses: Expense[];
 };
 
@@ -79,6 +81,13 @@ const expenseSortLabels: Record<ExpenseSortKey, string> = {
   recurrence: "Schedule",
 };
 
+const themeLabels: Record<AppTheme, string> = {
+  classic: "Classic",
+  halloween: "Halloween",
+  sakura: "Sakura",
+  hotline: "Hotline Miami",
+};
+
 const defaultExpenses: Expense[] = [];
 
 const defaultState: AppState = {
@@ -87,6 +96,7 @@ const defaultState: AppState = {
   nextPayDate: isoDate(new Date()),
   threshold: 0,
   monthsAhead: 4,
+  theme: "classic",
   expenses: defaultExpenses,
 };
 
@@ -691,8 +701,8 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f4ef] text-[#211f1b]">
-      <section className="border-b border-[#ddd4c7] bg-[#fffaf2]">
+    <main className="app-shell min-h-screen" data-theme={state.theme}>
+      <section className="app-header">
         <div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#6f5f4d]">Pay Schedule Dashboard</p>
@@ -765,6 +775,16 @@ export default function Home() {
                 <option value={4}>4 months</option>
                 <option value={6}>6 months</option>
                 <option value={12}>12 months</option>
+              </select>
+            </label>
+            <label>
+              Theme
+              <select value={state.theme} onChange={(event) => updateState("theme", event.target.value as AppTheme)}>
+                {(Object.keys(themeLabels) as AppTheme[]).map((theme) => (
+                  <option value={theme} key={theme}>
+                    {themeLabels[theme]}
+                  </option>
+                ))}
               </select>
             </label>
           </section>
