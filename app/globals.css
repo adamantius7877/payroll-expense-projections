@@ -203,15 +203,33 @@ button {
   font-size: 24px;
 }
 
-.paycheck-head span {
+.paycheck-head .remaining-total {
   color: #2b7767;
   font-size: 22px;
   font-weight: 800;
   white-space: nowrap;
 }
 
-.tight .paycheck-head span {
+.tight .paycheck-head .remaining-total {
   color: #a13f2a;
+}
+
+.paycheck-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.paycheck-totals span {
+  border: 1px solid #ddd4c7;
+  border-radius: 5px;
+  background: #fffdf8;
+  color: #665f55;
+  padding: 4px 6px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .meter {
@@ -269,6 +287,10 @@ button {
   white-space: nowrap;
 }
 
+.paycheck-card li span.credit-amount {
+  color: #2b7767;
+}
+
 .empty-row {
   color: #70685e;
 }
@@ -309,10 +331,10 @@ button {
 
 .expense-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.3fr) 110px 76px 130px minmax(260px, 1fr) minmax(260px, 1fr) 86px;
+  grid-template-columns: minmax(180px, 1.3fr) 110px 110px 76px 130px minmax(260px, 1fr) minmax(260px, 1fr) 86px;
   gap: 8px;
   align-items: center;
-  min-width: 1160px;
+  min-width: 1260px;
   padding: 10px 12px;
   border-bottom: 1px solid #eee5d8;
 }

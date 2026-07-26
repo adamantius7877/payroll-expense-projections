@@ -6,10 +6,12 @@ type Frequency = "weekly" | "biweekly" | "semimonthly" | "monthly";
 type Status = "not-paid" | "paid" | "cleared";
 type Category = "first-half" | "second-half" | "flex";
 type Recurrence = "per-paycheck" | "monthly" | "selected-months" | "annual";
+type ItemKind = "expense" | "credit";
 
 type Expense = {
   id: string;
   name: string;
+  kind: ItemKind;
   amount: number;
   dueDay: number;
   category: Category;
@@ -25,6 +27,8 @@ type Paycheck = {
   label: string;
   income: number;
   expenses: ProjectedExpense[];
+  expenseTotal: number;
+  creditTotal: number;
   remaining: number;
 };
 
@@ -83,6 +87,7 @@ function makeExpense(
   return {
     id,
     name,
+    kind: "expense",
     amount,
     dueDay,
     category,
@@ -97,6 +102,7 @@ function makeExpense(
 function normalizeExpense(expense: Expense): Expense {
   return {
     ...expense,
+    kind: expense.kind || "expense",
     recurrence: expense.recurrence || "monthly",
     activeMonths: Array.isArray(expense.activeMonths) ? expense.activeMonths : [],
     annualMonth: Number.isInteger(expense.annualMonth) ? expense.annualMonth : new Date().getMonth(),
@@ -147,6 +153,11 @@ function normalizeStatus(value: string | undefined): Status {
   if (clean === "c" || clean === "cleared") return "cleared";
   if (clean === "p" || clean === "paid") return "paid";
   return "not-paid";
+}
+
+function normalizeKind(value: string | undefined): ItemKind {
+  const clean = (value || "").trim().toLowerCase();
+  return clean === "credit" || clean === "income" ? "credit" : "expense";
 }
 
 function parseCurrency(value: string | undefined) {
@@ -206,6 +217,7 @@ function parseImportedExpenses(text: string): Expense[] {
       : header.indexOf("due date");
     const statusIndex = header.indexOf("status");
     const categoryIndex = header.indexOf("category");
+    const kindIndex = header.indexOf("type");
 
     return rows.slice(1).flatMap((row) => {
       const name = row[nameIndex]?.trim();
@@ -213,6 +225,9 @@ function parseImportedExpenses(text: string): Expense[] {
       const dueDay = Math.min(31, Math.max(1, parseInt(row[dueIndex] || "1", 10) || 1));
       const category = normalizeCategory(row[categoryIndex], dueDay);
       const expense = makeExpense(name, parseCurrency(row[amountIndex]), dueDay, category);
+      if (kindIndex >= 0) {
+        expense.kind = normalizeKind(row[kindIndex]);
+      }
       if (statusIndex >= 0) {
         expense.statuses[monthKey(new Date())] = normalizeStatus(row[statusIndex]);
       }
@@ -292,6 +307,22 @@ function expenseAmountForMonth(expense: Expense, key: string) {
   return cleanExpense.monthlyAmounts[key] ?? cleanExpense.amount;
 }
 
+function applyProjectedItem(check: Paycheck, item: ProjectedExpense) {
+  check.expenses.push(item);
+  if (item.expense.kind === "credit") {
+    check.creditTotal += item.amount;
+    check.remaining += item.amount;
+    return;
+  }
+  check.expenseTotal += item.amount;
+  check.remaining -= item.amount;
+}
+
+function itemAmountLabel(item: ProjectedExpense) {
+  const prefix = item.expense.kind === "credit" ? "+" : "";
+  return `${prefix}${money(item.amount)}`;
+}
+
 function nextPayDate(current: Date, frequency: Frequency) {
   if (frequency === "weekly") return addDays(current, 7);
   if (frequency === "biweekly") return addDays(current, 14);
@@ -319,6 +350,8 @@ function buildPaychecks(state: AppState): Paycheck[] {
       label: cursor.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       income: state.paycheckAmount,
       expenses: [],
+      expenseTotal: 0,
+      creditTotal: 0,
       remaining: state.paycheckAmount,
     });
     cursor = nextPayDate(cursor, state.frequency);
@@ -334,14 +367,13 @@ function buildPaychecks(state: AppState): Paycheck[] {
       const key = monthKey(check.date);
       const amount = expenseAmountForMonth(expense, key);
       if (amount <= 0) return;
-      check.expenses.push({
+      applyProjectedItem(check, {
         expense,
         occurrence: check.date,
         monthKey: key,
         amount,
         status: expense.statuses[key] || "not-paid",
       });
-      check.remaining -= amount;
     });
 
     const monthCursor = new Date(check.date.getFullYear(), check.date.getMonth(), 1, 12);
@@ -360,14 +392,13 @@ function buildPaychecks(state: AppState): Paycheck[] {
           12,
         );
         if (occurrence < check.date || occurrence >= periodEnd) return;
-        check.expenses.push({
+        applyProjectedItem(check, {
           expense,
           occurrence,
           monthKey: key,
           amount,
           status: expense.statuses[key] || "not-paid",
         });
-        check.remaining -= amount;
       });
 
       monthCursor.setMonth(monthCursor.getMonth() + 1);
@@ -459,8 +490,9 @@ export default function Home() {
         const selectedDate = new Date(`${selectedMonth}-01T12:00:00`);
         if (!expenseRunsInMonth(cleanExpense, selectedDate)) return sum;
         const amount = expenseAmountForMonth(cleanExpense, selectedMonth);
-        if (cleanExpense.recurrence !== "per-paycheck") return sum + amount;
-        return sum + amount * paychecks.filter((check) => monthKey(check.date) === selectedMonth).length;
+        const signedAmount = cleanExpense.kind === "credit" ? -amount : amount;
+        if (cleanExpense.recurrence !== "per-paycheck") return sum + signedAmount;
+        return sum + signedAmount * paychecks.filter((check) => monthKey(check.date) === selectedMonth).length;
       }, 0),
     [paychecks, selectedMonth, state.expenses],
   );
@@ -662,8 +694,13 @@ export default function Home() {
                   <div>
                     <p>{check.date.toLocaleDateString("en-US", { weekday: "short" })}</p>
                     <h2>{check.label}</h2>
+                    <div className="paycheck-totals">
+                      <span>Expenses {money(check.expenseTotal)}</span>
+                      {check.creditTotal > 0 && <span>Credits +{money(check.creditTotal)}</span>}
+                      <span>Difference {money(check.remaining)}</span>
+                    </div>
                   </div>
-                  <span>{money(check.remaining)}</span>
+                  <span className="remaining-total">{money(check.remaining)}</span>
                 </div>
                 <div className="meter" aria-hidden="true">
                   <span style={{ width: `${Math.max(0, Math.min(100, (check.remaining / check.income) * 100))}%` }} />
@@ -678,7 +715,7 @@ export default function Home() {
                           {item.status.replace("-", " ")} - {recurrenceLabel(item.expense)}
                         </small>
                       </div>
-                      <span>{money(item.amount)}</span>
+                      <span className={item.expense.kind === "credit" ? "credit-amount" : ""}>{itemAmountLabel(item)}</span>
                     </li>
                   ))}
                   {check.expenses.length === 0 && <li className="empty-row">No scheduled expenses.</li>}
@@ -714,6 +751,7 @@ export default function Home() {
             <div className="expense-table">
               <div className="expense-row header">
                 <span>Name</span>
+                <span>Type</span>
                 <span>Amount</span>
                 <span>Due</span>
                 <span>Group</span>
@@ -726,6 +764,10 @@ export default function Home() {
                 return (
                 <div className="expense-row" key={expense.id}>
                   <input value={expense.name} onChange={(event) => updateExpense(expense.id, { name: event.target.value })} />
+                  <select value={expense.kind} onChange={(event) => updateExpense(expense.id, { kind: event.target.value as ItemKind })}>
+                    <option value="expense">Expense</option>
+                    <option value="credit">Credit</option>
+                  </select>
                   <input
                     type="number"
                     value={expenseAmountForMonth(expense, selectedMonth)}
