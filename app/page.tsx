@@ -284,6 +284,12 @@ function recurrenceLabel(expense: Expense) {
   return cleanExpense.activeMonths.map((month) => shortMonths[month]).join(", ");
 }
 
+function expenseAmountForMonth(expense: Expense, key: string) {
+  const cleanExpense = normalizeExpense(expense);
+  if (cleanExpense.recurrence === "per-paycheck") return cleanExpense.amount;
+  return cleanExpense.monthlyAmounts[key] ?? cleanExpense.amount;
+}
+
 function nextPayDate(current: Date, frequency: Frequency) {
   if (frequency === "weekly") return addDays(current, 7);
   if (frequency === "biweekly") return addDays(current, 14);
@@ -323,7 +329,7 @@ function buildPaychecks(state: AppState): Paycheck[] {
     const key = monthKey(monthDate);
     state.expenses.map(normalizeExpense).forEach((expense) => {
       if (expense.recurrence === "per-paycheck" || !expenseRunsInMonth(expense, monthDate)) return;
-      const amount = expense.monthlyAmounts[key] ?? expense.amount;
+      const amount = expenseAmountForMonth(expense, key);
       if (amount <= 0) return;
       const occurrence = new Date(monthDate.getFullYear(), monthDate.getMonth(), Math.min(expense.dueDay, 28), 12);
       if (occurrence < start || occurrence > end) return;
@@ -341,7 +347,7 @@ function buildPaychecks(state: AppState): Paycheck[] {
     state.expenses.map(normalizeExpense).forEach((expense) => {
       if (expense.recurrence !== "per-paycheck") return;
       const key = monthKey(check.date);
-      const amount = expense.monthlyAmounts[key] ?? expense.amount;
+      const amount = expenseAmountForMonth(expense, key);
       if (amount <= 0) return;
       check.expenses.push({
         expense,
@@ -444,7 +450,7 @@ export default function Home() {
         const cleanExpense = normalizeExpense(expense);
         const selectedDate = new Date(`${selectedMonth}-01T12:00:00`);
         if (!expenseRunsInMonth(cleanExpense, selectedDate)) return sum;
-        const amount = cleanExpense.monthlyAmounts[selectedMonth] ?? cleanExpense.amount;
+        const amount = expenseAmountForMonth(cleanExpense, selectedMonth);
         if (cleanExpense.recurrence !== "per-paycheck") return sum + amount;
         return sum + amount * paychecks.filter((check) => monthKey(check.date) === selectedMonth).length;
       }, 0),
@@ -472,6 +478,7 @@ export default function Home() {
       activeMonths:
         recurrence === "selected-months" && !expense.activeMonths.length ? [month] : expense.activeMonths,
       annualMonth: recurrence === "annual" ? month : expense.annualMonth,
+      monthlyAmounts: recurrence === "per-paycheck" ? {} : expense.monthlyAmounts,
     });
   }
 
@@ -713,13 +720,16 @@ export default function Home() {
                   <input value={expense.name} onChange={(event) => updateExpense(expense.id, { name: event.target.value })} />
                   <input
                     type="number"
-                    value={expense.monthlyAmounts[selectedMonth] ?? expense.amount}
+                    value={expenseAmountForMonth(expense, selectedMonth)}
                     min={0}
                     onChange={(event) => {
                       const amount = Number(event.target.value);
                       updateExpense(expense.id, {
                         amount,
-                        monthlyAmounts: { ...expense.monthlyAmounts, [selectedMonth]: amount },
+                        monthlyAmounts:
+                          expense.recurrence === "per-paycheck"
+                            ? {}
+                            : { ...expense.monthlyAmounts, [selectedMonth]: amount },
                       });
                     }}
                   />
