@@ -24,7 +24,7 @@ On the server:
 ```bash
 git clone https://github.com/adamantius7877/payroll-expense-projections.git
 cd payroll-expense-projections
-APP_PORT=3000 ./scripts/deploy-docker.sh
+APP_PORT=3001 ./scripts/deploy-docker.sh
 ```
 
 On Windows PowerShell:
@@ -32,11 +32,11 @@ On Windows PowerShell:
 ```powershell
 git clone https://github.com/adamantius7877/payroll-expense-projections.git
 cd payroll-expense-projections
-$env:APP_PORT = "3000"
+$env:APP_PORT = "3001"
 .\scripts\deploy-docker.ps1
 ```
 
-Open `http://SERVER_IP:3000`, or change `APP_PORT` to expose a different host port.
+Open `http://SERVER_IP:3001`, or change `APP_PORT` to expose a different host port.
 
 ## Data Privacy
 
