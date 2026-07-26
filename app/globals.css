@@ -309,10 +309,10 @@ button {
 
 .expense-row {
   display: grid;
-  grid-template-columns: minmax(180px, 1.4fr) 110px 76px 130px minmax(260px, 1fr) 86px;
+  grid-template-columns: minmax(180px, 1.3fr) 110px 76px 130px minmax(260px, 1fr) minmax(260px, 1fr) 86px;
   gap: 8px;
   align-items: center;
-  min-width: 860px;
+  min-width: 1160px;
   padding: 10px 12px;
   border-bottom: 1px solid #eee5d8;
 }
@@ -328,6 +328,33 @@ button {
 .expense-row input,
 .expense-row select {
   padding: 8px 9px;
+}
+
+.recurrence-cell {
+  display: grid;
+  gap: 8px;
+}
+
+.month-picker {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.month-picker button {
+  min-height: 28px;
+  border: 1px solid #d8ccbd;
+  border-radius: 5px;
+  background: #fffdf8;
+  color: #594f45;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.month-picker button.active {
+  border-color: #235f55;
+  background: #2b7767;
+  color: #fff;
 }
 
 .segmented {

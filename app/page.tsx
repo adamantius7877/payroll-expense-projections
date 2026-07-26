@@ -5,6 +5,7 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 type Frequency = "weekly" | "biweekly" | "semimonthly" | "monthly";
 type Status = "not-paid" | "paid" | "cleared";
 type Category = "first-half" | "second-half" | "flex";
+type Recurrence = "per-paycheck" | "monthly" | "selected-months" | "annual";
 
 type Expense = {
   id: string;
@@ -12,6 +13,9 @@ type Expense = {
   amount: number;
   dueDay: number;
   category: Category;
+  recurrence: Recurrence;
+  activeMonths: number[];
+  annualMonth: number;
   statuses: Record<string, Status>;
   monthlyAmounts: Record<string, number>;
 };
@@ -84,8 +88,22 @@ function makeExpense(
     amount,
     dueDay,
     category,
+    recurrence: "monthly",
+    activeMonths: [],
+    annualMonth: new Date().getMonth(),
     statuses: {},
     monthlyAmounts: {},
+  };
+}
+
+function normalizeExpense(expense: Expense): Expense {
+  return {
+    ...expense,
+    recurrence: expense.recurrence || "monthly",
+    activeMonths: Array.isArray(expense.activeMonths) ? expense.activeMonths : [],
+    annualMonth: Number.isInteger(expense.annualMonth) ? expense.annualMonth : new Date().getMonth(),
+    statuses: expense.statuses || {},
+    monthlyAmounts: expense.monthlyAmounts || {},
   };
 }
 
@@ -112,6 +130,10 @@ function monthKey(date: Date) {
 function monthLabel(key: string) {
   const [year, month] = key.split("-").map(Number);
   return `${shortMonths[month - 1]} ${year}`;
+}
+
+function selectedMonthIndex(key: string) {
+  return Number(key.split("-")[1]) - 1;
 }
 
 function money(value: number) {
@@ -223,6 +245,8 @@ function parseImportedExpenses(text: string): Expense[] {
     const category: Category = rowIndex < 22 ? "first-half" : rowIndex < 30 ? "flex" : "second-half";
     const dueDay = category === "second-half" ? 16 : category === "flex" ? 8 : 1;
     const expense = byName.get(name) || makeExpense(name, entries[entries.length - 1].amount, dueDay, category);
+    expense.recurrence = entries.length < monthColumns.length ? "selected-months" : "monthly";
+    expense.activeMonths = entries.map((entry) => Number(entry.key.split("-")[1]) - 1);
 
     entries.forEach((entry) => {
       expense.monthlyAmounts[entry.key] = entry.amount;
@@ -242,6 +266,24 @@ function normalizeCategory(value: string | undefined, dueDay: number): Category 
   if (clean.includes("flex") || clean.includes("other")) return "flex";
   if (clean.includes("first")) return "first-half";
   return dueDay > 15 ? "second-half" : "first-half";
+}
+
+function expenseRunsInMonth(expense: Expense, date: Date) {
+  const cleanExpense = normalizeExpense(expense);
+  const month = date.getMonth();
+  if (cleanExpense.recurrence === "per-paycheck") return true;
+  if (cleanExpense.recurrence === "monthly") return true;
+  if (cleanExpense.recurrence === "selected-months") return cleanExpense.activeMonths.includes(month);
+  return cleanExpense.annualMonth === month;
+}
+
+function recurrenceLabel(expense: Expense) {
+  const cleanExpense = normalizeExpense(expense);
+  if (cleanExpense.recurrence === "per-paycheck") return "every paycheck";
+  if (cleanExpense.recurrence === "monthly") return "monthly";
+  if (cleanExpense.recurrence === "annual") return `yearly in ${monthNames[cleanExpense.annualMonth]}`;
+  if (!cleanExpense.activeMonths.length) return "no months selected";
+  return cleanExpense.activeMonths.map((month) => shortMonths[month]).join(", ");
 }
 
 function nextPayDate(current: Date, frequency: Frequency) {
@@ -281,7 +323,8 @@ function buildPaychecks(state: AppState): Paycheck[] {
 
   months.forEach((monthDate) => {
     const key = monthKey(monthDate);
-    state.expenses.forEach((expense) => {
+    state.expenses.map(normalizeExpense).forEach((expense) => {
+      if (expense.recurrence === "per-paycheck" || !expenseRunsInMonth(expense, monthDate)) return;
       const amount = expense.monthlyAmounts[key] ?? expense.amount;
       if (amount <= 0) return;
       const occurrence = new Date(monthDate.getFullYear(), monthDate.getMonth(), Math.min(expense.dueDay, 28), 12);
@@ -293,6 +336,23 @@ function buildPaychecks(state: AppState): Paycheck[] {
         amount,
         status: expense.statuses[key] || "not-paid",
       });
+    });
+  });
+
+  checks.forEach((check) => {
+    state.expenses.map(normalizeExpense).forEach((expense) => {
+      if (expense.recurrence !== "per-paycheck") return;
+      const key = monthKey(check.date);
+      const amount = expense.monthlyAmounts[key] ?? expense.amount;
+      if (amount <= 0) return;
+      check.expenses.push({
+        expense,
+        occurrence: check.date,
+        monthKey: key,
+        amount,
+        status: expense.statuses[key] || "not-paid",
+      });
+      check.remaining -= amount;
     });
   });
 
@@ -322,7 +382,11 @@ export default function Home() {
     if (!saved) return;
     try {
       const parsed = JSON.parse(saved) as AppState;
-      setState({ ...defaultState, ...parsed });
+      setState({
+        ...defaultState,
+        ...parsed,
+        expenses: (parsed.expenses || []).map(normalizeExpense),
+      });
     } catch {
       setImportMessage("Saved data could not be loaded, so starter values are showing.");
     }
@@ -336,9 +400,14 @@ export default function Home() {
   const selectedTotal = useMemo(
     () =>
       state.expenses.reduce((sum, expense) => {
-        return sum + (expense.monthlyAmounts[selectedMonth] ?? expense.amount);
+        const cleanExpense = normalizeExpense(expense);
+        const selectedDate = new Date(`${selectedMonth}-01T12:00:00`);
+        if (!expenseRunsInMonth(cleanExpense, selectedDate)) return sum;
+        const amount = cleanExpense.monthlyAmounts[selectedMonth] ?? cleanExpense.amount;
+        if (cleanExpense.recurrence !== "per-paycheck") return sum + amount;
+        return sum + amount * paychecks.filter((check) => monthKey(check.date) === selectedMonth).length;
       }, 0),
-    [selectedMonth, state.expenses],
+    [paychecks, selectedMonth, state.expenses],
   );
   const tightChecks = paychecks.filter((check) => check.remaining < state.threshold);
 
@@ -349,8 +418,27 @@ export default function Home() {
   function updateExpense(id: string, patch: Partial<Expense>) {
     setState((current) => ({
       ...current,
-      expenses: current.expenses.map((expense) => (expense.id === id ? { ...expense, ...patch } : expense)),
+      expenses: current.expenses.map((expense) =>
+        expense.id === id ? { ...normalizeExpense(expense), ...patch } : normalizeExpense(expense),
+      ),
     }));
+  }
+
+  function updateExpenseRecurrence(expense: Expense, recurrence: Recurrence) {
+    const month = selectedMonthIndex(selectedMonth);
+    updateExpense(expense.id, {
+      recurrence,
+      activeMonths:
+        recurrence === "selected-months" && !expense.activeMonths.length ? [month] : expense.activeMonths,
+      annualMonth: recurrence === "annual" ? month : expense.annualMonth,
+    });
+  }
+
+  function toggleExpenseMonth(expense: Expense, month: number) {
+    const activeMonths = expense.activeMonths.includes(month)
+      ? expense.activeMonths.filter((activeMonth) => activeMonth !== month)
+      : [...expense.activeMonths, month].sort((a, b) => a - b);
+    updateExpense(expense.id, { activeMonths });
   }
 
   function updateMonthStatus(expense: Expense, status: Status) {
@@ -359,7 +447,7 @@ export default function Home() {
     });
   }
 
-function addExpense() {
+  function addExpense() {
     setState((current) => ({
       ...current,
       expenses: [...current.expenses, makeExpense("New expense", 0, 1, "first-half", `expense-${Date.now()}`)],
@@ -530,8 +618,8 @@ function addExpense() {
                       <div>
                         <strong>{item.expense.name}</strong>
                         <small>
-                          Due {item.occurrence.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ·{" "}
-                          {item.status.replace("-", " ")}
+                          Due {item.occurrence.toLocaleDateString("en-US", { month: "short", day: "numeric" })} -{" "}
+                          {item.status.replace("-", " ")} - {recurrenceLabel(item.expense)}
                         </small>
                       </div>
                       <span>{money(item.amount)}</span>
@@ -573,10 +661,13 @@ function addExpense() {
                 <span>Amount</span>
                 <span>Due</span>
                 <span>Group</span>
+                <span>Schedule</span>
                 <span>Status</span>
                 <span></span>
               </div>
-              {state.expenses.map((expense) => (
+              {state.expenses.map((rawExpense) => {
+                const expense = normalizeExpense(rawExpense);
+                return (
                 <div className="expense-row" key={expense.id}>
                   <input value={expense.name} onChange={(event) => updateExpense(expense.id, { name: event.target.value })} />
                   <input
@@ -603,6 +694,37 @@ function addExpense() {
                     <option value="second-half">Second half</option>
                     <option value="flex">Flexible</option>
                   </select>
+                  <div className="recurrence-cell">
+                    <select value={expense.recurrence} onChange={(event) => updateExpenseRecurrence(expense, event.target.value as Recurrence)}>
+                      <option value="per-paycheck">Per paycheck</option>
+                      <option value="monthly">Per month</option>
+                      <option value="selected-months">Certain months</option>
+                      <option value="annual">Once a year</option>
+                    </select>
+                    {expense.recurrence === "selected-months" && (
+                      <div className="month-picker" aria-label={`${expense.name} active months`}>
+                        {shortMonths.map((month, index) => (
+                          <button
+                            type="button"
+                            className={expense.activeMonths.includes(index) ? "active" : ""}
+                            onClick={() => toggleExpenseMonth(expense, index)}
+                            key={month}
+                          >
+                            {month}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {expense.recurrence === "annual" && (
+                      <select value={expense.annualMonth} onChange={(event) => updateExpense(expense.id, { annualMonth: Number(event.target.value) })}>
+                        {monthNames.map((month, index) => (
+                          <option value={index} key={month}>
+                            {month}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
                   <div className="segmented" aria-label={`${expense.name} payment status`}>
                     {(["not-paid", "paid", "cleared"] as Status[]).map((status) => (
                       <button
@@ -619,7 +741,8 @@ function addExpense() {
                     Remove
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </section>
