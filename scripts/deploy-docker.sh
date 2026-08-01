@@ -1,10 +1,21 @@
 #!/usr/bin/env sh
 set -eu
 
+if [ -f .env ]; then
+  set -a
+  . ./.env
+  set +a
+fi
+
 APP_PORT="${APP_PORT:-3001}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-change-this-local-password}"
 export APP_PORT
 export POSTGRES_PASSWORD
+
+if [ "$POSTGRES_PASSWORD" = "change-this-local-password" ]; then
+  echo "POSTGRES_PASSWORD is still set to the default. Set a real POSTGRES_PASSWORD in .env before deploying." >&2
+  exit 1
+fi
 
 BACKUP_DIR="${BACKUP_DIR:-backups}"
 mkdir -p "$BACKUP_DIR"
