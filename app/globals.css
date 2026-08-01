@@ -202,9 +202,34 @@ button {
   color: var(--danger);
 }
 
+.tab-bar {
+  display: flex;
+  gap: 8px;
+  padding-top: 14px;
+}
+
+.tab-bar button {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted-strong);
+  padding: 9px 14px;
+  font-weight: 800;
+}
+
+.tab-bar button.active {
+  border-color: var(--accent-strong);
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
 .control-panel,
 .expense-manager,
-.alert-band {
+.alert-band,
+.allowance-actions section,
+.allowance-user,
+.allowance-empty-state {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
@@ -281,6 +306,152 @@ button {
   border-color: var(--danger-border);
   background: var(--danger-soft);
   color: var(--danger);
+}
+
+.allowance-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.allowance-summary span {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 14px 16px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.allowance-summary strong {
+  display: block;
+  color: var(--app-text);
+  font-size: 24px;
+}
+
+.allowance-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.allowance-actions section {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.allowance-actions h2,
+.allowance-empty-state h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.allowance-actions label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.allowance-board {
+  display: grid;
+  gap: 12px;
+}
+
+.allowance-user {
+  overflow: hidden;
+}
+
+.allowance-user-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.allowance-user-head > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.allowance-user-head input {
+  max-width: 280px;
+  padding: 8px 9px;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.allowance-user-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.allowance-user-head strong {
+  color: var(--accent);
+  font-size: 26px;
+  white-space: nowrap;
+}
+
+.allowance-transactions {
+  display: grid;
+}
+
+.allowance-transaction {
+  display: grid;
+  grid-template-columns:
+    minmax(92px, 0.7fr)
+    minmax(110px, 0.8fr)
+    minmax(150px, 1.5fr)
+    minmax(84px, 0.7fr)
+    minmax(70px, 0.45fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--meter-bg);
+}
+
+.allowance-transaction.header {
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.allowance-transaction a {
+  color: var(--accent-strong);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.allowance-transaction strong {
+  white-space: nowrap;
+}
+
+.credit-amount {
+  color: var(--accent);
+}
+
+.allowance-empty {
+  padding: 16px;
+}
+
+.allowance-empty-state {
+  padding: 24px;
+}
+
+.allowance-empty-state p {
+  margin: 8px 0 0;
+  color: var(--muted);
 }
 
 .projection-grid {
@@ -714,9 +885,38 @@ button {
 
   .table-toolbar,
   .toolbar-actions,
-  .alert-band {
+  .alert-band,
+  .allowance-user-head {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .tab-bar {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .tab-bar button {
+    flex: 1;
+  }
+
+  .allowance-summary,
+  .allowance-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .allowance-user-head strong {
+    white-space: normal;
+  }
+
+  .allowance-transaction.header {
+    display: none;
+  }
+
+  .allowance-transaction {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 12px;
   }
 
   .toolbar-actions select {
