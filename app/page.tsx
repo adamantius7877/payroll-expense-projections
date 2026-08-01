@@ -11,6 +11,8 @@ type ExpenseSortKey = "name" | "kind" | "amount" | "dueDay" | "category" | "recu
 type FilterKey = "all" | ExpenseSortKey;
 type SortDirection = "asc" | "desc";
 type AppTheme = "classic" | "halloween" | "sakura" | "hotline";
+type ActiveTab = "planner" | "allowances";
+type AllowanceTransactionType = "deposit" | "expense";
 
 type Expense = {
   id: string;
@@ -25,6 +27,25 @@ type Expense = {
   statuses: Record<string, Status>;
   monthlyAmounts: Record<string, number>;
   amountOverrides: Record<string, number>;
+};
+
+type AllowanceTransaction = {
+  id: string;
+  type: AllowanceTransactionType;
+  date: string;
+  amount: number;
+  note: string;
+  link: string;
+};
+
+type AllowanceUser = {
+  id: string;
+  name: string;
+  transactions: AllowanceTransaction[];
+};
+
+type AllowanceState = {
+  users: AllowanceUser[];
 };
 
 type Paycheck = {
@@ -54,6 +75,7 @@ type AppState = {
   monthsAhead: number;
   theme: AppTheme;
   expenses: Expense[];
+  allowances: AllowanceState;
 };
 
 const monthNames = [
@@ -90,6 +112,9 @@ const themeLabels: Record<AppTheme, string> = {
 };
 
 const defaultExpenses: Expense[] = [];
+const defaultAllowances: AllowanceState = {
+  users: [],
+};
 
 const defaultState: AppState = {
   paycheckAmount: 0,
@@ -99,6 +124,7 @@ const defaultState: AppState = {
   monthsAhead: 4,
   theme: "classic",
   expenses: defaultExpenses,
+  allowances: defaultAllowances,
 };
 
 function makeExpense(
@@ -134,6 +160,29 @@ function normalizeExpense(expense: Expense): Expense {
     statuses: expense.statuses || {},
     monthlyAmounts: expense.monthlyAmounts || {},
     amountOverrides: expense.amountOverrides || {},
+  };
+}
+
+function normalizeAllowanceUser(user: AllowanceUser): AllowanceUser {
+  return {
+    id: user.id || `allowance-user-${Date.now()}`,
+    name: user.name || "Unnamed user",
+    transactions: Array.isArray(user.transactions)
+      ? user.transactions.map((transaction) => ({
+          id: transaction.id || `allowance-transaction-${Date.now()}`,
+          type: transaction.type === "deposit" ? "deposit" : "expense",
+          date: transaction.date || isoDate(new Date()),
+          amount: Number.isFinite(Number(transaction.amount)) ? Number(transaction.amount) : 0,
+          note: transaction.note || "",
+          link: transaction.link || "",
+        }))
+      : [],
+  };
+}
+
+function normalizeAllowanceState(allowances: AllowanceState | undefined): AllowanceState {
+  return {
+    users: Array.isArray(allowances?.users) ? allowances.users.map(normalizeAllowanceUser) : [],
   };
 }
 
@@ -174,8 +223,34 @@ function money(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: Number.isInteger(value || 0) ? 0 : 2,
+    maximumFractionDigits: 2,
   }).format(value || 0);
+}
+
+function allowanceBalance(user: AllowanceUser) {
+  return user.transactions.reduce((total, transaction) => {
+    return transaction.type === "deposit" ? total + transaction.amount : total - transaction.amount;
+  }, 0);
+}
+
+function allowanceTotals(users: AllowanceUser[]) {
+  return users.reduce(
+    (totals, user) => {
+      const deposits = user.transactions
+        .filter((transaction) => transaction.type === "deposit")
+        .reduce((sum, transaction) => sum + transaction.amount, 0);
+      const spent = user.transactions
+        .filter((transaction) => transaction.type === "expense")
+        .reduce((sum, transaction) => sum + transaction.amount, 0);
+      return {
+        deposits: totals.deposits + deposits,
+        spent: totals.spent + spent,
+        balance: totals.balance + deposits - spent,
+      };
+    },
+    { deposits: 0, spent: 0, balance: 0 },
+  );
 }
 
 function normalizeStatus(value: string | undefined): Status {
@@ -504,6 +579,7 @@ function buildPaychecks(state: AppState): Paycheck[] {
 
 export default function Home() {
   const [state, setState] = useState<AppState>(defaultState);
+  const [activeTab, setActiveTab] = useState<ActiveTab>("planner");
   const [selectedMonth, setSelectedMonth] = useState(monthKey(new Date()));
   const [importMessage, setImportMessage] = useState("Ready to import a Google Sheet CSV.");
   const [isLoaded, setIsLoaded] = useState(false);
@@ -514,7 +590,15 @@ export default function Home() {
   const [sortKey, setSortKey] = useState<ExpenseSortKey>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [collapsedChecks, setCollapsedChecks] = useState<Record<string, boolean>>({});
+  const [selectedAllowanceUserId, setSelectedAllowanceUserId] = useState("all");
+  const [newAllowanceUserName, setNewAllowanceUserName] = useState("");
+  const [allowanceDepositAmount, setAllowanceDepositAmount] = useState("");
+  const [allowanceDepositReason, setAllowanceDepositReason] = useState("");
+  const [allowanceExpenseItem, setAllowanceExpenseItem] = useState("");
+  const [allowanceExpenseAmount, setAllowanceExpenseAmount] = useState("");
+  const [allowanceExpenseLink, setAllowanceExpenseLink] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const nextAllowanceIdRef = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -526,11 +610,14 @@ export default function Home() {
         const payload = (await response.json()) as { state?: AppState | null };
         if (!active) return;
         if (payload.state) {
+          const allowances = normalizeAllowanceState(payload.state.allowances);
           setState({
             ...defaultState,
             ...payload.state,
             expenses: (payload.state.expenses || []).map(normalizeExpense),
+            allowances,
           });
+          setSelectedAllowanceUserId(allowances.users[0]?.id || "all");
           setSaveStatus("Shared data loaded.");
         } else {
           setSaveStatus("No shared data yet. Changes will save to the database.");
@@ -591,6 +678,12 @@ export default function Home() {
     [paychecks, selectedMonth, state.expenses],
   );
   const tightChecks = paychecks.filter((check) => check.remaining < state.threshold);
+  const allowanceUsers = state.allowances.users.map(normalizeAllowanceUser);
+  const selectedAllowanceUser =
+    allowanceUsers.find((user) => user.id === selectedAllowanceUserId) || allowanceUsers[0] || null;
+  const visibleAllowanceUsers =
+    selectedAllowanceUserId === "all" ? allowanceUsers : selectedAllowanceUser ? [selectedAllowanceUser] : [];
+  const allowanceSummary = allowanceTotals(allowanceUsers);
   const displayedExpenses = useMemo(() => {
     const search = expenseSearch.trim().toLowerCase();
     const filter = filterValue.trim().toLowerCase();
@@ -697,6 +790,93 @@ export default function Home() {
     }));
   }
 
+  function nextAllowanceId(prefix: string) {
+    const transactionCount = state.allowances.users.reduce((count, user) => count + user.transactions.length, 0);
+    nextAllowanceIdRef.current += 1;
+    return `${prefix}-${state.allowances.users.length}-${transactionCount}-${nextAllowanceIdRef.current}`;
+  }
+
+  function addAllowanceUser() {
+    const name = newAllowanceUserName.trim();
+    if (!name) return;
+    const id = nextAllowanceId("allowance-user");
+    setState((current) => ({
+      ...current,
+      allowances: {
+        users: [
+          ...normalizeAllowanceState(current.allowances).users,
+          {
+            id,
+            name,
+            transactions: [],
+          },
+        ],
+      },
+    }));
+    setSelectedAllowanceUserId(id);
+    setNewAllowanceUserName("");
+  }
+
+  function updateAllowanceUser(userId: string, patch: Partial<AllowanceUser>) {
+    setState((current) => ({
+      ...current,
+      allowances: {
+        users: normalizeAllowanceState(current.allowances).users.map((user) =>
+          user.id === userId ? { ...user, ...patch } : user,
+        ),
+      },
+    }));
+  }
+
+  function addAllowanceTransaction(type: AllowanceTransactionType) {
+    if (!selectedAllowanceUser) return;
+    const amountText = type === "deposit" ? allowanceDepositAmount : allowanceExpenseAmount;
+    const amount = Number(amountText);
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    const note =
+      type === "deposit"
+        ? allowanceDepositReason.trim() || "Allowance"
+        : allowanceExpenseItem.trim() || "Expense";
+    const transaction: AllowanceTransaction = {
+      id: nextAllowanceId("allowance-transaction"),
+      type,
+      date: isoDate(new Date()),
+      amount,
+      note,
+      link: type === "expense" ? allowanceExpenseLink.trim() : "",
+    };
+
+    updateAllowanceUser(selectedAllowanceUser.id, {
+      transactions: [transaction, ...selectedAllowanceUser.transactions],
+    });
+
+    if (type === "deposit") {
+      setAllowanceDepositAmount("");
+      setAllowanceDepositReason("");
+    } else {
+      setAllowanceExpenseItem("");
+      setAllowanceExpenseAmount("");
+      setAllowanceExpenseLink("");
+    }
+  }
+
+  function addAllowanceDeposit() {
+    addAllowanceTransaction("deposit");
+  }
+
+  function addAllowanceExpense() {
+    addAllowanceTransaction("expense");
+  }
+
+  function removeAllowanceTransaction(userId: string, transactionId: string) {
+    const user = allowanceUsers.find((allowanceUser) => allowanceUser.id === userId);
+    if (!user) return;
+    updateAllowanceUser(userId, {
+      transactions: user.transactions.filter((transaction) => transaction.id !== transactionId),
+    });
+  }
+
   function exportData() {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -735,22 +915,59 @@ export default function Home() {
             </p>
           </div>
           <div className="summary-strip" aria-label="Projection summary">
-            <span>
-              <strong>{money(state.paycheckAmount)}</strong>
-              paycheck
-            </span>
-            <span>
-              <strong>{paychecks.length}</strong>
-              checks
-            </span>
-            <span className={tightChecks.length ? "warning" : ""}>
-              <strong>{tightChecks.length}</strong>
-              tight
-            </span>
+            {activeTab === "planner" ? (
+              <>
+                <span>
+                  <strong>{money(state.paycheckAmount)}</strong>
+                  paycheck
+                </span>
+                <span>
+                  <strong>{paychecks.length}</strong>
+                  checks
+                </span>
+                <span className={tightChecks.length ? "warning" : ""}>
+                  <strong>{tightChecks.length}</strong>
+                  tight
+                </span>
+              </>
+            ) : (
+              <>
+                <span>
+                  <strong>{allowanceUsers.length}</strong>
+                  users
+                </span>
+                <span>
+                  <strong>{money(allowanceSummary.balance)}</strong>
+                  balance
+                </span>
+                <span>
+                  <strong>{money(allowanceSummary.spent)}</strong>
+                  spent
+                </span>
+              </>
+            )}
           </div>
         </div>
       </section>
 
+      <nav className="tab-bar mx-auto max-w-7xl px-5" aria-label="Dashboard sections">
+        <button
+          type="button"
+          className={activeTab === "planner" ? "active" : ""}
+          onClick={() => setActiveTab("planner")}
+        >
+          Planner
+        </button>
+        <button
+          type="button"
+          className={activeTab === "allowances" ? "active" : ""}
+          onClick={() => setActiveTab("allowances")}
+        >
+          Allowances
+        </button>
+      </nav>
+
+      {activeTab === "planner" ? (
       <div className="mx-auto grid max-w-7xl gap-5 px-5 py-5 xl:grid-cols-[360px_1fr]">
         <aside className="control-panel">
           <section>
@@ -965,7 +1182,8 @@ export default function Home() {
                 />
                 <select value={selectedMonth} onChange={(event) => setSelectedMonth(event.target.value)}>
                   {Array.from({ length: 12 }, (_, index) => {
-                    const date = addMonths(new Date(), index);
+                    const today = new Date();
+                    const date = new Date(today.getFullYear(), today.getMonth() + index, 1, 12);
                     const key = monthKey(date);
                     return (
                       <option value={key} key={key}>
@@ -1067,6 +1285,206 @@ export default function Home() {
           </div>
         </section>
       </div>
+      ) : (
+      <div className="mx-auto grid max-w-7xl gap-5 px-5 py-5 xl:grid-cols-[320px_1fr]">
+        <aside className="control-panel">
+          <section>
+            <h2>Add user</h2>
+            <label>
+              User name
+              <input
+                value={newAllowanceUserName}
+                onChange={(event) => setNewAllowanceUserName(event.target.value)}
+                placeholder="Name"
+              />
+            </label>
+            <button className="primary-button" type="button" onClick={addAllowanceUser}>
+              Add user
+            </button>
+          </section>
+
+          <section>
+            <h2>View</h2>
+            <label>
+              Select user
+              <select
+                value={selectedAllowanceUserId}
+                onChange={(event) => setSelectedAllowanceUserId(event.target.value)}
+              >
+                <option value="all">All users</option>
+                {allowanceUsers.map((user) => (
+                  <option value={user.id} key={user.id}>
+                    {user.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="status-note">
+              {selectedAllowanceUserId === "all"
+                ? `Showing ${allowanceUsers.length} allowance user${allowanceUsers.length === 1 ? "" : "s"}.`
+                : selectedAllowanceUser
+                  ? `Selected balance: ${money(allowanceBalance(selectedAllowanceUser))}.`
+                  : "Add a user to start tracking allowances."}
+            </p>
+          </section>
+        </aside>
+
+        <section className="space-y-5">
+          <div className="allowance-summary">
+            <span>
+              <strong>{money(allowanceSummary.deposits)}</strong>
+              Added
+            </span>
+            <span>
+              <strong>{money(allowanceSummary.spent)}</strong>
+              Spent
+            </span>
+            <span>
+              <strong>{money(allowanceSummary.balance)}</strong>
+              Remaining
+            </span>
+          </div>
+
+          {selectedAllowanceUserId !== "all" && selectedAllowanceUser && (
+            <div className="allowance-actions">
+              <section>
+                <h2>Add money</h2>
+                <label>
+                  Amount
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={allowanceDepositAmount}
+                    onChange={(event) => setAllowanceDepositAmount(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Reason
+                  <input
+                    value={allowanceDepositReason}
+                    onChange={(event) => setAllowanceDepositReason(event.target.value)}
+                    placeholder="Allowance, bonus, extra chore"
+                  />
+                </label>
+                <button className="primary-button" type="button" onClick={addAllowanceDeposit}>
+                  Add money
+                </button>
+              </section>
+
+              <section>
+                <h2>Add expense</h2>
+                <label>
+                  Item
+                  <input
+                    value={allowanceExpenseItem}
+                    onChange={(event) => setAllowanceExpenseItem(event.target.value)}
+                    placeholder="Item name"
+                  />
+                </label>
+                <label>
+                  Amount
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={allowanceExpenseAmount}
+                    onChange={(event) => setAllowanceExpenseAmount(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Link
+                  <input
+                    type="url"
+                    value={allowanceExpenseLink}
+                    onChange={(event) => setAllowanceExpenseLink(event.target.value)}
+                    placeholder="Optional"
+                  />
+                </label>
+                <button className="primary-button" type="button" onClick={addAllowanceExpense}>
+                  Add expense
+                </button>
+              </section>
+            </div>
+          )}
+
+          <div className="allowance-board">
+            {visibleAllowanceUsers.map((user) => {
+              const userBalance = allowanceBalance(user);
+              const deposits = user.transactions
+                .filter((transaction) => transaction.type === "deposit")
+                .reduce((sum, transaction) => sum + transaction.amount, 0);
+              const spent = user.transactions
+                .filter((transaction) => transaction.type === "expense")
+                .reduce((sum, transaction) => sum + transaction.amount, 0);
+
+              return (
+                <article className="allowance-user" key={user.id}>
+                  <div className="allowance-user-head">
+                    <div>
+                      <input
+                        value={user.name}
+                        onChange={(event) => updateAllowanceUser(user.id, { name: event.target.value })}
+                        aria-label={`${user.name} name`}
+                      />
+                      <p>
+                        Added {money(deposits)} - Spent {money(spent)}
+                      </p>
+                    </div>
+                    <strong>{money(userBalance)}</strong>
+                  </div>
+
+                  <div className="allowance-transactions">
+                    <div className="allowance-transaction header">
+                      <span>Date</span>
+                      <span>Type</span>
+                      <span>Item or reason</span>
+                      <span>Amount</span>
+                      <span></span>
+                    </div>
+                    {user.transactions.map((transaction) => (
+                      <div className="allowance-transaction" key={transaction.id}>
+                        <span>{new Date(`${transaction.date}T12:00:00`).toLocaleDateString("en-US")}</span>
+                        <span>{transaction.type === "deposit" ? "Money added" : "Expense"}</span>
+                        <span>
+                          {transaction.link ? (
+                            <a href={transaction.link} target="_blank" rel="noreferrer">
+                              {transaction.note}
+                            </a>
+                          ) : (
+                            transaction.note
+                          )}
+                        </span>
+                        <strong className={transaction.type === "deposit" ? "credit-amount" : ""}>
+                          {transaction.type === "deposit" ? "+" : "-"}
+                          {money(transaction.amount)}
+                        </strong>
+                        <button
+                          className="remove-button"
+                          type="button"
+                          onClick={() => removeAllowanceTransaction(user.id, transaction.id)}
+                          aria-label={`Remove ${transaction.note}`}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                    {user.transactions.length === 0 && <div className="empty-row allowance-empty">No allowance activity yet.</div>}
+                  </div>
+                </article>
+              );
+            })}
+
+            {visibleAllowanceUsers.length === 0 && (
+              <div className="allowance-empty-state">
+                <h2>No allowance users yet</h2>
+                <p>Add a user, then select them to add money or record expenses.</p>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+      )}
     </main>
   );
 }
