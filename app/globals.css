@@ -400,6 +400,12 @@ button {
   white-space: nowrap;
 }
 
+.allowance-user-actions {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
 .allowance-transactions {
   display: grid;
 }
@@ -407,15 +413,22 @@ button {
 .allowance-transaction {
   display: grid;
   grid-template-columns:
-    minmax(92px, 0.7fr)
-    minmax(110px, 0.8fr)
-    minmax(150px, 1.5fr)
-    minmax(84px, 0.7fr)
+    minmax(126px, 0.8fr)
+    minmax(118px, 0.8fr)
+    minmax(150px, 1.25fr)
+    minmax(92px, 0.65fr)
+    minmax(140px, 1.1fr)
     minmax(70px, 0.45fr);
   gap: 10px;
   align-items: center;
   padding: 10px 12px;
   border-bottom: 1px solid var(--meter-bg);
+}
+
+.allowance-transaction input,
+.allowance-transaction select {
+  min-width: 0;
+  padding: 8px 9px;
 }
 
 .allowance-transaction.header {
@@ -907,6 +920,10 @@ button {
 
   .allowance-user-head strong {
     white-space: normal;
+  }
+
+  .allowance-user-actions {
+    justify-items: start;
   }
 
   .allowance-transaction.header {

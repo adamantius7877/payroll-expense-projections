@@ -163,15 +163,15 @@ function normalizeExpense(expense: Expense): Expense {
   };
 }
 
-function normalizeAllowanceUser(user: AllowanceUser): AllowanceUser {
+function normalizeAllowanceUser(user: AllowanceUser, userIndex = 0): AllowanceUser {
   return {
-    id: user.id || `allowance-user-${Date.now()}`,
+    id: user.id || `allowance-user-${userIndex}`,
     name: user.name || "Unnamed user",
     transactions: Array.isArray(user.transactions)
-      ? user.transactions.map((transaction) => ({
-          id: transaction.id || `allowance-transaction-${Date.now()}`,
+      ? user.transactions.map((transaction, transactionIndex) => ({
+          id: transaction.id || `allowance-transaction-${userIndex}-${transactionIndex}`,
           type: transaction.type === "deposit" ? "deposit" : "expense",
-          date: transaction.date || isoDate(new Date()),
+          date: transaction.date || "",
           amount: Number.isFinite(Number(transaction.amount)) ? Number(transaction.amount) : 0,
           note: transaction.note || "",
           link: transaction.link || "",
@@ -828,6 +828,17 @@ export default function Home() {
     }));
   }
 
+  function removeAllowanceUser(userId: string) {
+    setState((current) => {
+      const users = normalizeAllowanceState(current.allowances).users.filter((user) => user.id !== userId);
+      return {
+        ...current,
+        allowances: { users },
+      };
+    });
+    setSelectedAllowanceUserId((current) => (current === userId ? "all" : current));
+  }
+
   function addAllowanceTransaction(type: AllowanceTransactionType) {
     if (!selectedAllowanceUser) return;
     const amountText = type === "deposit" ? allowanceDepositAmount : allowanceExpenseAmount;
@@ -874,6 +885,20 @@ export default function Home() {
     if (!user) return;
     updateAllowanceUser(userId, {
       transactions: user.transactions.filter((transaction) => transaction.id !== transactionId),
+    });
+  }
+
+  function updateAllowanceTransaction(
+    userId: string,
+    transactionId: string,
+    patch: Partial<AllowanceTransaction>,
+  ) {
+    const user = allowanceUsers.find((allowanceUser) => allowanceUser.id === userId);
+    if (!user) return;
+    updateAllowanceUser(userId, {
+      transactions: user.transactions.map((transaction) =>
+        transaction.id === transactionId ? { ...transaction, ...patch } : transaction,
+      ),
     });
   }
 
@@ -1431,7 +1456,17 @@ export default function Home() {
                         Added {money(deposits)} - Spent {money(spent)}
                       </p>
                     </div>
-                    <strong>{money(userBalance)}</strong>
+                    <div className="allowance-user-actions">
+                      <strong>{money(userBalance)}</strong>
+                      <button
+                        className="remove-button"
+                        type="button"
+                        onClick={() => removeAllowanceUser(user.id)}
+                        aria-label={`Remove ${user.name}`}
+                      >
+                        Remove user
+                      </button>
+                    </div>
                   </div>
 
                   <div className="allowance-transactions">
@@ -1440,25 +1475,58 @@ export default function Home() {
                       <span>Type</span>
                       <span>Item or reason</span>
                       <span>Amount</span>
+                      <span>Link</span>
                       <span></span>
                     </div>
                     {user.transactions.map((transaction) => (
                       <div className="allowance-transaction" key={transaction.id}>
-                        <span>{new Date(`${transaction.date}T12:00:00`).toLocaleDateString("en-US")}</span>
-                        <span>{transaction.type === "deposit" ? "Money added" : "Expense"}</span>
-                        <span>
-                          {transaction.link ? (
-                            <a href={transaction.link} target="_blank" rel="noreferrer">
-                              {transaction.note}
-                            </a>
-                          ) : (
-                            transaction.note
-                          )}
-                        </span>
-                        <strong className={transaction.type === "deposit" ? "credit-amount" : ""}>
-                          {transaction.type === "deposit" ? "+" : "-"}
-                          {money(transaction.amount)}
-                        </strong>
+                        <input
+                          type="date"
+                          value={transaction.date}
+                          onChange={(event) =>
+                            updateAllowanceTransaction(user.id, transaction.id, { date: event.target.value })
+                          }
+                          aria-label={`${transaction.note} date`}
+                        />
+                        <select
+                          value={transaction.type}
+                          onChange={(event) =>
+                            updateAllowanceTransaction(user.id, transaction.id, {
+                              type: event.target.value as AllowanceTransactionType,
+                            })
+                          }
+                          aria-label={`${transaction.note} type`}
+                        >
+                          <option value="deposit">Money added</option>
+                          <option value="expense">Expense</option>
+                        </select>
+                        <input
+                          value={transaction.note}
+                          onChange={(event) =>
+                            updateAllowanceTransaction(user.id, transaction.id, { note: event.target.value })
+                          }
+                          aria-label={`${transaction.note} item or reason`}
+                        />
+                        <input
+                          className={transaction.type === "deposit" ? "credit-amount" : ""}
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          value={transaction.amount}
+                          onChange={(event) =>
+                            updateAllowanceTransaction(user.id, transaction.id, { amount: Number(event.target.value) })
+                          }
+                          aria-label={`${transaction.note} amount`}
+                        />
+                        <input
+                          type="url"
+                          value={transaction.link}
+                          onChange={(event) =>
+                            updateAllowanceTransaction(user.id, transaction.id, { link: event.target.value })
+                          }
+                          placeholder="Optional"
+                          aria-label={`${transaction.note} link`}
+                        />
                         <button
                           className="remove-button"
                           type="button"
