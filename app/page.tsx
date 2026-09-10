@@ -581,7 +581,7 @@ function buildPaychecks(state: AppState): Paycheck[] {
 
 export default function Home() {
   const [state, setState] = useState<AppState>(defaultState);
-  const [activeTab, setActiveTab] = useState<ActiveTab>("planner");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("allowances");
   const [selectedMonth, setSelectedMonth] = useState(monthKey(new Date()));
   const [importMessage, setImportMessage] = useState("Ready to import a Google Sheet CSV.");
   const [isLoaded, setIsLoaded] = useState(false);
@@ -981,17 +981,17 @@ export default function Home() {
       <nav className="tab-bar mx-auto max-w-7xl px-5" aria-label="Dashboard sections">
         <button
           type="button"
-          className={activeTab === "planner" ? "active" : ""}
-          onClick={() => setActiveTab("planner")}
-        >
-          Planner
-        </button>
-        <button
-          type="button"
           className={activeTab === "allowances" ? "active" : ""}
           onClick={() => setActiveTab("allowances")}
         >
           Allowances
+        </button>
+        <button
+          type="button"
+          className={activeTab === "planner" ? "active" : ""}
+          onClick={() => setActiveTab("planner")}
+        >
+          Planner
         </button>
       </nav>
 
