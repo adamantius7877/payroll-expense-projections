@@ -116,6 +116,8 @@ const defaultAllowances: AllowanceState = {
   users: [],
 };
 
+const lastAllowanceUserStorageKey = "payroll-dashboard:last-allowance-user";
+
 const defaultState: AppState = {
   paycheckAmount: 0,
   frequency: "biweekly",
@@ -591,6 +593,7 @@ export default function Home() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [collapsedChecks, setCollapsedChecks] = useState<Record<string, boolean>>({});
   const [selectedAllowanceUserId, setSelectedAllowanceUserId] = useState("all");
+  const [isAddAllowanceUserOpen, setIsAddAllowanceUserOpen] = useState(false);
   const [newAllowanceUserName, setNewAllowanceUserName] = useState("");
   const [allowanceDepositAmount, setAllowanceDepositAmount] = useState("");
   const [allowanceDepositReason, setAllowanceDepositReason] = useState("");
@@ -611,13 +614,16 @@ export default function Home() {
         if (!active) return;
         if (payload.state) {
           const allowances = normalizeAllowanceState(payload.state.allowances);
+          const lastAllowanceUserId = window.localStorage.getItem(lastAllowanceUserStorageKey);
           setState({
             ...defaultState,
             ...payload.state,
             expenses: (payload.state.expenses || []).map(normalizeExpense),
             allowances,
           });
-          setSelectedAllowanceUserId(allowances.users[0]?.id || "all");
+          setSelectedAllowanceUserId(
+            allowances.users.find((user) => user.id === lastAllowanceUserId)?.id || allowances.users[0]?.id || "all",
+          );
           setSaveStatus("Shared data loaded.");
         } else {
           setSaveStatus("No shared data yet. Changes will save to the database.");
@@ -663,6 +669,11 @@ export default function Home() {
     };
   }, [isLoaded, state]);
 
+  useEffect(() => {
+    if (!isLoaded || selectedAllowanceUserId === "all") return;
+    window.localStorage.setItem(lastAllowanceUserStorageKey, selectedAllowanceUserId);
+  }, [isLoaded, selectedAllowanceUserId]);
+
   const paychecks = useMemo(() => buildPaychecks(state), [state]);
   const selectedTotal = useMemo(
     () =>
@@ -683,7 +694,7 @@ export default function Home() {
     allowanceUsers.find((user) => user.id === selectedAllowanceUserId) || allowanceUsers[0] || null;
   const visibleAllowanceUsers =
     selectedAllowanceUserId === "all" ? allowanceUsers : selectedAllowanceUser ? [selectedAllowanceUser] : [];
-  const allowanceSummary = allowanceTotals(allowanceUsers);
+  const allowanceSummary = allowanceTotals(visibleAllowanceUsers);
   const displayedExpenses = useMemo(() => {
     const search = expenseSearch.trim().toLowerCase();
     const filter = filterValue.trim().toLowerCase();
@@ -815,6 +826,7 @@ export default function Home() {
     }));
     setSelectedAllowanceUserId(id);
     setNewAllowanceUserName("");
+    setIsAddAllowanceUserOpen(false);
   }
 
   function updateAllowanceUser(userId: string, patch: Partial<AllowanceUser>) {
@@ -836,7 +848,9 @@ export default function Home() {
         allowances: { users },
       };
     });
-    setSelectedAllowanceUserId((current) => (current === userId ? "all" : current));
+    setSelectedAllowanceUserId((current) =>
+      current === userId ? allowanceUsers.find((user) => user.id !== userId)?.id || "all" : current,
+    );
   }
 
   function addAllowanceTransaction(type: AllowanceTransactionType) {
@@ -939,8 +953,8 @@ export default function Home() {
               hits the account.
             </p>
           </div>
+          {activeTab === "planner" && (
           <div className="summary-strip" aria-label="Projection summary">
-            {activeTab === "planner" ? (
               <>
                 <span>
                   <strong>{money(state.paycheckAmount)}</strong>
@@ -955,23 +969,8 @@ export default function Home() {
                   tight
                 </span>
               </>
-            ) : (
-              <>
-                <span>
-                  <strong>{allowanceUsers.length}</strong>
-                  users
-                </span>
-                <span>
-                  <strong>{money(allowanceSummary.balance)}</strong>
-                  balance
-                </span>
-                <span>
-                  <strong>{money(allowanceSummary.spent)}</strong>
-                  spent
-                </span>
-              </>
-            )}
           </div>
+          )}
         </div>
       </section>
 
@@ -991,6 +990,48 @@ export default function Home() {
           Allowances
         </button>
       </nav>
+
+      {isAddAllowanceUserOpen && (
+        <div className="dialog-backdrop" role="presentation" onMouseDown={() => setIsAddAllowanceUserOpen(false)}>
+          <div
+            className="dialog-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-allowance-user-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                addAllowanceUser();
+              }}
+            >
+              <div className="dialog-head">
+                <h2 id="add-allowance-user-title">Add user</h2>
+                <button
+                  className="secondary-button compact"
+                  type="button"
+                  onClick={() => setIsAddAllowanceUserOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+              <label>
+                User name
+                <input
+                  value={newAllowanceUserName}
+                  onChange={(event) => setNewAllowanceUserName(event.target.value)}
+                  placeholder="Name"
+                  autoFocus
+                />
+              </label>
+              <button className="primary-button" type="submit">
+                Add user
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {activeTab === "planner" ? (
       <div className="mx-auto grid max-w-7xl gap-5 px-5 py-5 xl:grid-cols-[360px_1fr]">
@@ -1315,15 +1356,7 @@ export default function Home() {
         <aside className="control-panel">
           <section>
             <h2>Add user</h2>
-            <label>
-              User name
-              <input
-                value={newAllowanceUserName}
-                onChange={(event) => setNewAllowanceUserName(event.target.value)}
-                placeholder="Name"
-              />
-            </label>
-            <button className="primary-button" type="button" onClick={addAllowanceUser}>
+            <button className="primary-button" type="button" onClick={() => setIsAddAllowanceUserOpen(true)}>
               Add user
             </button>
           </section>
@@ -1372,64 +1405,68 @@ export default function Home() {
 
           {selectedAllowanceUserId !== "all" && selectedAllowanceUser && (
             <div className="allowance-actions">
-              <section>
-                <h2>Add money</h2>
-                <label>
-                  Amount
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={allowanceDepositAmount}
-                    onChange={(event) => setAllowanceDepositAmount(event.target.value)}
-                  />
-                </label>
-                <label>
-                  Reason
-                  <input
-                    value={allowanceDepositReason}
-                    onChange={(event) => setAllowanceDepositReason(event.target.value)}
-                    placeholder="Allowance, bonus, extra chore"
-                  />
-                </label>
-                <button className="primary-button" type="button" onClick={addAllowanceDeposit}>
-                  Add money
-                </button>
-              </section>
+              <details className="allowance-action-panel">
+                <summary>Add money</summary>
+                <div>
+                  <label>
+                    Amount
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={allowanceDepositAmount}
+                      onChange={(event) => setAllowanceDepositAmount(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Reason
+                    <input
+                      value={allowanceDepositReason}
+                      onChange={(event) => setAllowanceDepositReason(event.target.value)}
+                      placeholder="Allowance, bonus, extra chore"
+                    />
+                  </label>
+                  <button className="primary-button" type="button" onClick={addAllowanceDeposit}>
+                    Add money
+                  </button>
+                </div>
+              </details>
 
-              <section>
-                <h2>Add expense</h2>
-                <label>
-                  Item
-                  <input
-                    value={allowanceExpenseItem}
-                    onChange={(event) => setAllowanceExpenseItem(event.target.value)}
-                    placeholder="Item name"
-                  />
-                </label>
-                <label>
-                  Amount
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={allowanceExpenseAmount}
-                    onChange={(event) => setAllowanceExpenseAmount(event.target.value)}
-                  />
-                </label>
-                <label>
-                  Link
-                  <input
-                    type="url"
-                    value={allowanceExpenseLink}
-                    onChange={(event) => setAllowanceExpenseLink(event.target.value)}
-                    placeholder="Optional"
-                  />
-                </label>
-                <button className="primary-button" type="button" onClick={addAllowanceExpense}>
-                  Add expense
-                </button>
-              </section>
+              <details className="allowance-action-panel">
+                <summary>Add expense</summary>
+                <div>
+                  <label>
+                    Item
+                    <input
+                      value={allowanceExpenseItem}
+                      onChange={(event) => setAllowanceExpenseItem(event.target.value)}
+                      placeholder="Item name"
+                    />
+                  </label>
+                  <label>
+                    Amount
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={allowanceExpenseAmount}
+                      onChange={(event) => setAllowanceExpenseAmount(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Link
+                    <input
+                      type="url"
+                      value={allowanceExpenseLink}
+                      onChange={(event) => setAllowanceExpenseLink(event.target.value)}
+                      placeholder="Optional"
+                    />
+                  </label>
+                  <button className="primary-button" type="button" onClick={addAllowanceExpense}>
+                    Add expense
+                  </button>
+                </div>
+              </details>
             </div>
           )}
 

@@ -227,7 +227,7 @@ button {
 .control-panel,
 .expense-manager,
 .alert-band,
-.allowance-actions section,
+.allowance-action-panel,
 .allowance-user,
 .allowance-empty-state {
   border: 1px solid var(--border);
@@ -308,6 +308,51 @@ button {
   color: var(--danger);
 }
 
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(20, 16, 12, 0.45);
+}
+
+.dialog-panel {
+  width: min(100%, 420px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+}
+
+.dialog-panel form {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.dialog-panel label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dialog-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+}
+
 .allowance-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -336,13 +381,53 @@ button {
   gap: 12px;
 }
 
-.allowance-actions section {
+.allowance-action-panel {
+  overflow: hidden;
+}
+
+.allowance-action-panel summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 54px;
+  padding: 14px 16px;
+  color: var(--app-text);
+  font-size: 16px;
+  font-weight: 800;
+  list-style: none;
+  cursor: pointer;
+}
+
+.allowance-action-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.allowance-action-panel summary::after {
+  content: "+";
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-soft);
+  color: var(--muted-strong);
+}
+
+.allowance-action-panel[open] summary {
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.allowance-action-panel[open] summary::after {
+  content: "-";
+}
+
+.allowance-action-panel > div {
   display: grid;
   gap: 12px;
   padding: 16px;
 }
 
-.allowance-actions h2,
 .allowance-empty-state h2 {
   margin: 0;
   font-size: 16px;
