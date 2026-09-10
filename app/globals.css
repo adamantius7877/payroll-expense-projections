@@ -326,7 +326,8 @@ button {
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
 }
 
-.dialog-panel form {
+.dialog-panel form,
+.dialog-content {
   display: grid;
   gap: 14px;
   padding: 18px;
@@ -351,6 +352,17 @@ button {
   margin: 0;
   font-size: 18px;
   font-weight: 800;
+}
+
+.dialog-warning {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.confirm-remove-button {
+  min-height: 44px;
 }
 
 .allowance-summary {
@@ -489,6 +501,40 @@ button {
   display: grid;
   justify-items: end;
   gap: 8px;
+}
+
+.allowance-danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--danger-border);
+  border-radius: 8px;
+  background: var(--danger-soft);
+  padding: 16px;
+}
+
+.allowance-danger-zone h2,
+.allowance-danger-zone p {
+  margin: 0;
+}
+
+.allowance-danger-zone h2 {
+  color: var(--danger);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.allowance-danger-zone p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.allowance-danger-zone .remove-button {
+  width: auto;
+  min-width: 170px;
 }
 
 .allowance-transactions {
@@ -1009,6 +1055,15 @@ button {
 
   .allowance-user-actions {
     justify-items: start;
+  }
+
+  .allowance-danger-zone {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .allowance-danger-zone .remove-button {
+    width: 100%;
   }
 
   .allowance-transaction.header {

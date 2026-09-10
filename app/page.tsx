@@ -594,6 +594,7 @@ export default function Home() {
   const [collapsedChecks, setCollapsedChecks] = useState<Record<string, boolean>>({});
   const [selectedAllowanceUserId, setSelectedAllowanceUserId] = useState("all");
   const [isAddAllowanceUserOpen, setIsAddAllowanceUserOpen] = useState(false);
+  const [allowanceUserIdPendingRemoval, setAllowanceUserIdPendingRemoval] = useState<string | null>(null);
   const [newAllowanceUserName, setNewAllowanceUserName] = useState("");
   const [allowanceDepositAmount, setAllowanceDepositAmount] = useState("");
   const [allowanceDepositReason, setAllowanceDepositReason] = useState("");
@@ -692,6 +693,8 @@ export default function Home() {
   const allowanceUsers = state.allowances.users.map(normalizeAllowanceUser);
   const selectedAllowanceUser =
     allowanceUsers.find((user) => user.id === selectedAllowanceUserId) || allowanceUsers[0] || null;
+  const allowanceUserPendingRemoval =
+    allowanceUsers.find((user) => user.id === allowanceUserIdPendingRemoval) || null;
   const visibleAllowanceUsers =
     selectedAllowanceUserId === "all" ? allowanceUsers : selectedAllowanceUser ? [selectedAllowanceUser] : [];
   const allowanceSummary = allowanceTotals(visibleAllowanceUsers);
@@ -851,6 +854,7 @@ export default function Home() {
     setSelectedAllowanceUserId((current) =>
       current === userId ? allowanceUsers.find((user) => user.id !== userId)?.id || "all" : current,
     );
+    setAllowanceUserIdPendingRemoval(null);
   }
 
   function addAllowanceTransaction(type: AllowanceTransactionType) {
@@ -1029,6 +1033,41 @@ export default function Home() {
                 Add user
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {allowanceUserPendingRemoval && (
+        <div className="dialog-backdrop" role="presentation" onMouseDown={() => setAllowanceUserIdPendingRemoval(null)}>
+          <div
+            className="dialog-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="remove-allowance-user-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="dialog-content">
+              <div className="dialog-head">
+                <h2 id="remove-allowance-user-title">Remove user?</h2>
+                <button
+                  className="secondary-button compact"
+                  type="button"
+                  onClick={() => setAllowanceUserIdPendingRemoval(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+              <p className="dialog-warning">
+                This will remove {allowanceUserPendingRemoval.name} and all of their allowance activity.
+              </p>
+              <button
+                className="remove-button confirm-remove-button"
+                type="button"
+                onClick={() => removeAllowanceUser(allowanceUserPendingRemoval.id)}
+              >
+                Remove {allowanceUserPendingRemoval.name}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1495,14 +1534,6 @@ export default function Home() {
                     </div>
                     <div className="allowance-user-actions">
                       <strong>{money(userBalance)}</strong>
-                      <button
-                        className="remove-button"
-                        type="button"
-                        onClick={() => removeAllowanceUser(user.id)}
-                        aria-label={`Remove ${user.name}`}
-                      >
-                        Remove user
-                      </button>
                     </div>
                   </div>
 
@@ -1587,6 +1618,22 @@ export default function Home() {
               </div>
             )}
           </div>
+
+          {selectedAllowanceUserId !== "all" && selectedAllowanceUser && (
+            <section className="allowance-danger-zone" aria-label="Remove allowance user">
+              <div>
+                <h2>Remove user</h2>
+                <p>Deletes {selectedAllowanceUser.name} and all allowance activity for that user.</p>
+              </div>
+              <button
+                className="remove-button"
+                type="button"
+                onClick={() => setAllowanceUserIdPendingRemoval(selectedAllowanceUser.id)}
+              >
+                Remove {selectedAllowanceUser.name}
+              </button>
+            </section>
+          )}
         </section>
       </div>
       )}
