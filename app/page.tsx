@@ -1394,13 +1394,6 @@ export default function Home() {
       <div className="mx-auto grid max-w-7xl gap-5 px-5 py-5 xl:grid-cols-[320px_1fr]">
         <aside className="control-panel">
           <section>
-            <h2>Add user</h2>
-            <button className="primary-button" type="button" onClick={() => setIsAddAllowanceUserOpen(true)}>
-              Add user
-            </button>
-          </section>
-
-          <section>
             <h2>View</h2>
             <label>
               Select user
@@ -1619,7 +1612,18 @@ export default function Home() {
             )}
           </div>
 
-          {selectedAllowanceUserId !== "all" && selectedAllowanceUser && (
+          <div className="allowance-user-management">
+            <section className="allowance-bottom-action" aria-label="Add allowance user">
+              <div>
+                <h2>Add user</h2>
+                <p>Add a new person to track allowance activity.</p>
+              </div>
+              <button className="primary-button" type="button" onClick={() => setIsAddAllowanceUserOpen(true)}>
+                Add user
+              </button>
+            </section>
+
+            {selectedAllowanceUserId !== "all" && selectedAllowanceUser && (
             <section className="allowance-danger-zone" aria-label="Remove allowance user">
               <div>
                 <h2>Remove user</h2>
@@ -1633,7 +1637,8 @@ export default function Home() {
                 Remove {selectedAllowanceUser.name}
               </button>
             </section>
-          )}
+            )}
+          </div>
         </section>
       </div>
       )}

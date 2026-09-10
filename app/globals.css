@@ -459,6 +459,45 @@ button {
   gap: 12px;
 }
 
+.allowance-user-management {
+  display: grid;
+  gap: 12px;
+}
+
+.allowance-bottom-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 16px;
+}
+
+.allowance-bottom-action h2,
+.allowance-bottom-action p {
+  margin: 0;
+}
+
+.allowance-bottom-action h2 {
+  color: var(--app-text);
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.allowance-bottom-action p {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.allowance-bottom-action .primary-button {
+  width: auto;
+  min-width: 150px;
+}
+
 .allowance-user {
   overflow: hidden;
 }
@@ -1060,6 +1099,15 @@ button {
   .allowance-danger-zone {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .allowance-bottom-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .allowance-bottom-action .primary-button {
+    width: 100%;
   }
 
   .allowance-danger-zone .remove-button {
